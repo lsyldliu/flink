@@ -273,11 +273,13 @@ public class StreamTaskStateInitializerImplTest {
 		if (createTimerServiceManager) {
 			return new StreamTaskStateInitializerImpl(
 				dummyEnvironment,
-				stateBackend);
+				stateBackend,
+				TtlTimeProvider.DEFAULT);
 		} else {
 			return new StreamTaskStateInitializerImpl(
 				dummyEnvironment,
-				stateBackend) {
+				stateBackend,
+				TtlTimeProvider.DEFAULT) {
 				@Override
 				protected <K> InternalTimeServiceManager<K> internalTimeServiceManager(
 					AbstractKeyedStateBackend<K> keyedStatedBackend,

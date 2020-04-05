@@ -26,6 +26,7 @@ import org.apache.flink.runtime.state.CheckpointStorage;
 import org.apache.flink.runtime.state.CheckpointStorageWorkerView;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
+import org.apache.flink.runtime.state.ttl.MockTtlTimeProvider;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.operators.MockStreamStatusMaintainer;
 import org.apache.flink.streaming.api.operators.StreamTaskStateInitializer;
@@ -68,7 +69,7 @@ public class MockStreamTaskBuilder {
 
 		StateBackend stateBackend = new MemoryStateBackend();
 		this.checkpointStorage = stateBackend.createCheckpointStorage(new JobID());
-		this.streamTaskStateInitializer = new StreamTaskStateInitializerImpl(environment, stateBackend);
+		this.streamTaskStateInitializer = new StreamTaskStateInitializerImpl(environment, stateBackend, new MockTtlTimeProvider());
 	}
 
 	public MockStreamTaskBuilder setName(String name) {

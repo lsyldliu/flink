@@ -54,6 +54,7 @@ import org.apache.flink.runtime.state.KeyedStateBackend;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
+import org.apache.flink.runtime.state.ttl.MockTtlTimeProvider;
 import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
@@ -317,7 +318,8 @@ public class StreamingRuntimeContextTest {
 
 		StreamTaskStateInitializer streamTaskStateManager = new StreamTaskStateInitializerImpl(
 			environment,
-			new MemoryStateBackend());
+			new MemoryStateBackend(),
+			TtlTimeProvider.DEFAULT);
 
 		KeyedStateBackend keyedStateBackend = mock(KeyedStateBackend.class);
 

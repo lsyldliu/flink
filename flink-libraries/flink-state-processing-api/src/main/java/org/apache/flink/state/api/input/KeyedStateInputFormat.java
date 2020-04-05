@@ -34,6 +34,7 @@ import org.apache.flink.runtime.state.DefaultKeyedStateStore;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.StateBackend;
+import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
 import org.apache.flink.state.api.functions.KeyedStateReaderFunction;
 import org.apache.flink.state.api.input.operator.StateReaderOperator;
 import org.apache.flink.state.api.input.splits.KeyGroupRangeInputSplit;
@@ -69,6 +70,8 @@ public class KeyedStateInputFormat<K, N, OUT> extends RichInputFormat<OUT, KeyGr
 
 	private final StateBackend stateBackend;
 
+	private final TtlTimeProvider ttlTimeProvider;
+
 	private final StateReaderOperator<?, K, N, OUT> operator;
 
 	private transient CloseableRegistry registry;
@@ -86,13 +89,16 @@ public class KeyedStateInputFormat<K, N, OUT> extends RichInputFormat<OUT, KeyGr
 	public KeyedStateInputFormat(
 		OperatorState operatorState,
 		StateBackend stateBackend,
-		StateReaderOperator<?, K, N, OUT> operator) {
+		StateReaderOperator<?, K, N, OUT> operator,
+		TtlTimeProvider ttlTimeProvider) {
 		Preconditions.checkNotNull(operatorState, "The operator state cannot be null");
 		Preconditions.checkNotNull(stateBackend, "The state backend cannot be null");
+		Preconditions.checkNotNull(ttlTimeProvider, "The ttlTimeProvider cannot be null");
 		Preconditions.checkNotNull(operator, "The operator cannot be null");
 
 		this.operatorState = operatorState;
 		this.stateBackend = stateBackend;
+		this.ttlTimeProvider = ttlTimeProvider;
 		this.operator = operator;
 	}
 
@@ -162,7 +168,8 @@ public class KeyedStateInputFormat<K, N, OUT> extends RichInputFormat<OUT, KeyGr
 	private StreamOperatorStateContext getStreamOperatorStateContext(Environment environment) throws IOException {
 		StreamTaskStateInitializer initializer = new StreamTaskStateInitializerImpl(
 			environment,
-			stateBackend);
+			stateBackend,
+			ttlTimeProvider);
 
 		try {
 			return initializer.streamOperatorStateContext(

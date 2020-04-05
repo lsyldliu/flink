@@ -39,6 +39,7 @@ import org.apache.flink.runtime.state.StateSnapshotContext;
 import org.apache.flink.runtime.state.StateSnapshotContextSynchronousImpl;
 import org.apache.flink.runtime.state.memory.MemCheckpointStreamFactory;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
+import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
 import org.apache.flink.streaming.api.operators.StreamOperatorStateHandler.CheckpointedStreamOperator;
 import org.apache.flink.streaming.runtime.tasks.TestProcessingTimeService;
 import org.apache.flink.util.ExceptionUtils;
@@ -88,7 +89,7 @@ public class StreamOperatorStateHandlerTest {
 			context.getRawOperatorStateOutput();
 
 			StreamTaskStateInitializerImpl stateInitializer =
-				new StreamTaskStateInitializerImpl(new MockEnvironmentBuilder().build(), new MemoryStateBackend());
+				new StreamTaskStateInitializerImpl(new MockEnvironmentBuilder().build(), new MemoryStateBackend(), TtlTimeProvider.DEFAULT);
 			StreamOperatorStateContext stateContext = stateInitializer.streamOperatorStateContext(
 				new OperatorID(),
 				"whatever",

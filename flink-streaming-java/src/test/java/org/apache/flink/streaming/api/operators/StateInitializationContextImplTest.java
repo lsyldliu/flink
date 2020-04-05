@@ -53,6 +53,8 @@ import org.apache.flink.runtime.state.TaskStateManagerImpl;
 import org.apache.flink.runtime.state.TestTaskLocalStateStore;
 import org.apache.flink.runtime.state.memory.ByteStreamStateHandle;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
+import org.apache.flink.runtime.state.ttl.MockTtlTimeProvider;
+import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.util.LongArrayList;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
@@ -171,7 +173,8 @@ public class StateInitializationContextImplTest {
 		StateBackend stateBackend = new MemoryStateBackend(1024);
 		StreamTaskStateInitializer streamTaskStateManager = new StreamTaskStateInitializerImpl(
 			environment,
-			stateBackend) {
+			stateBackend,
+			TtlTimeProvider.DEFAULT) {
 
 			@Override
 			protected <K> InternalTimeServiceManager<K> internalTimeServiceManager(

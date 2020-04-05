@@ -48,6 +48,7 @@ import org.apache.flink.runtime.state.CheckpointStorageWorkerView;
 import org.apache.flink.runtime.state.CheckpointStreamFactory;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.StateBackendLoader;
+import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
 import org.apache.flink.runtime.taskmanager.DispatcherThreadFactory;
 import org.apache.flink.runtime.util.ExecutorThreadFactory;
 import org.apache.flink.runtime.util.FatalExitExceptionHandler;
@@ -169,6 +170,8 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 	/** Our state backend. We use this to create checkpoint streams and a keyed state backend. */
 	protected final StateBackend stateBackend;
+
+	protected final TtlTimeProvider ttlTimeProvider = TtlTimeProvider.DEFAULT;
 
 	/** The external storage where checkpoint data is persisted. */
 	private final CheckpointStorageWorkerView checkpointStorage;
@@ -397,7 +400,8 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	public StreamTaskStateInitializer createStreamTaskStateInitializer() {
 		return new StreamTaskStateInitializerImpl(
 			getEnvironment(),
-			stateBackend);
+			stateBackend,
+			ttlTimeProvider);
 	}
 
 	protected Counter setupNumRecordsInCounter(StreamOperator streamOperator) {
