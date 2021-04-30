@@ -20,6 +20,7 @@ package org.apache.flink.table.runtime.operators.window;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.ExecutionConfig;
+import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.runtime.generated.GeneratedNamespaceAggsHandleFunction;
 import org.apache.flink.table.runtime.generated.GeneratedNamespaceTableAggsHandleFunction;
 import org.apache.flink.table.runtime.generated.GeneratedRecordEqualiser;
@@ -27,6 +28,7 @@ import org.apache.flink.table.runtime.generated.NamespaceAggsHandleFunction;
 import org.apache.flink.table.runtime.generated.NamespaceAggsHandleFunctionBase;
 import org.apache.flink.table.runtime.generated.NamespaceTableAggsHandleFunction;
 import org.apache.flink.table.runtime.generated.RecordEqualiser;
+import org.apache.flink.table.runtime.operators.bundle.trigger.BundleTrigger;
 import org.apache.flink.table.runtime.operators.window.assigners.CountSlidingWindowAssigner;
 import org.apache.flink.table.runtime.operators.window.assigners.CountTumblingWindowAssigner;
 import org.apache.flink.table.runtime.operators.window.assigners.CumulativeWindowAssigner;
@@ -74,6 +76,8 @@ public class WindowOperatorBuilder {
     protected boolean produceUpdates = false;
     protected int rowtimeIndex = -1;
     protected ZoneId shiftTimeZone = ZoneId.of("UTC");
+    private BundleTrigger<RowData> bundleTrigger;
+
 
     public static WindowOperatorBuilder builder() {
         return new WindowOperatorBuilder();
@@ -183,6 +187,11 @@ public class WindowOperatorBuilder {
         return this;
     }
 
+    public WindowOperatorBuilder withBundleTrigger(BundleTrigger<RowData> bundleTrigger) {
+        this.bundleTrigger = bundleTrigger;
+        return this;
+    }
+
     protected void aggregate(
             LogicalType[] accumulatorTypes,
             LogicalType[] aggResultTypes,
@@ -276,6 +285,7 @@ public class WindowOperatorBuilder {
 
         public WindowOperator build() {
             checkNotNull(windowOperatorBuilder.trigger, "trigger is not set");
+            AggregateWindowOperator aggregateWindowOperator;
             if (generatedTableAggregateFunction != null) {
                 //noinspection unchecked
                 return new TableAggregateWindowOperator(
@@ -340,9 +350,10 @@ public class WindowOperatorBuilder {
 
         public AggregateWindowOperator build() {
             checkNotNull(windowOperatorBuilder.trigger, "trigger is not set");
+            AggregateWindowOperator aggregateWindowOperator;
             if (generatedAggregateFunction != null && generatedEqualiser != null) {
                 //noinspection unchecked
-                return new AggregateWindowOperator(
+                aggregateWindowOperator = new AggregateWindowOperator(
                         generatedAggregateFunction,
                         generatedEqualiser,
                         windowOperatorBuilder.windowAssigner,
@@ -359,7 +370,7 @@ public class WindowOperatorBuilder {
                         windowOperatorBuilder.shiftTimeZone);
             } else {
                 //noinspection unchecked
-                return new AggregateWindowOperator(
+                aggregateWindowOperator = new AggregateWindowOperator(
                         aggregateFunction,
                         equaliser,
                         windowOperatorBuilder.windowAssigner,
@@ -375,6 +386,9 @@ public class WindowOperatorBuilder {
                         windowOperatorBuilder.allowedLateness,
                         windowOperatorBuilder.shiftTimeZone);
             }
+            aggregateWindowOperator.setBundleTrigger(windowOperatorBuilder.bundleTrigger);
+            return aggregateWindowOperator;
         }
+
     }
 }

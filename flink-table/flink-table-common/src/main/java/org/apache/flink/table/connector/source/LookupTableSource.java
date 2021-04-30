@@ -22,6 +22,7 @@ import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.types.RowKind;
 
 import java.io.Serializable;
+import java.util.Optional;
 
 /**
  * A {@link DynamicTableSource} that looks up rows of an external storage system by one or more keys
@@ -42,6 +43,7 @@ import java.io.Serializable;
  */
 @PublicEvolving
 public interface LookupTableSource extends DynamicTableSource {
+    long DEFAULT_LATER_RETRY_MS = -1;
 
     /**
      * Returns a provider of runtime implementation for reading the data.
@@ -101,5 +103,17 @@ public interface LookupTableSource extends DynamicTableSource {
      */
     interface LookupRuntimeProvider {
         // marker interface
+    }
+
+
+    /**
+     * Return a flag to indicate whether to hash the input stream by join key.
+     * Note that this flag is of higher priority than TABLE_EXEC_KEYBY_BEFORE_LOOKUP_JOIN
+     * config in ExecutionConfigOptions.
+     * The default value is an empty optional, which means the behavior is controlled by the
+     * TABLE_EXEC_KEYBY_BEFORE_LOOKUP_JOIN config.
+     */
+    default Optional<Boolean> isInputKeyByEnabled() {
+        return Optional.empty();
     }
 }

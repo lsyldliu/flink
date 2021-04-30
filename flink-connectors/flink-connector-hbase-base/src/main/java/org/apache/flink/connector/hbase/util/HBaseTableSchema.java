@@ -41,7 +41,7 @@ import static org.apache.flink.table.types.utils.TypeConversions.fromLogicalToDa
 
 /** Helps to specify an HBase Table's schema. */
 @Internal
-public class HBaseTableSchema implements Serializable {
+public class  HBaseTableSchema implements Serializable {
 
     private static final long serialVersionUID = 1L;
 

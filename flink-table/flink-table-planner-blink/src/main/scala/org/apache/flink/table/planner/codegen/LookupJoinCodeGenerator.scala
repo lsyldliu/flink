@@ -17,7 +17,7 @@
  */
 package org.apache.flink.table.planner.codegen
 
-import org.apache.flink.api.common.functions.{FlatMapFunction, Function}
+import org.apache.flink.api.common.functions.{FlatMapFunction, Function, MapFunction}
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.streaming.api.functions.async.AsyncFunction
 import org.apache.flink.table.api.{TableConfig, ValidationException}
@@ -45,11 +45,14 @@ import org.apache.flink.table.types.logical.{LogicalType, RowType}
 import org.apache.flink.table.types.utils.DataTypeUtils.transform
 import org.apache.flink.types.Row
 import org.apache.flink.util.Collector
-
 import org.apache.calcite.rel.`type`.RelDataType
 import org.apache.calcite.rex.RexNode
-
 import java.util
+
+import org.apache.flink.api.common.typeinfo.TypeInformation
+import org.apache.flink.api.java.typeutils.RowTypeInfo
+import org.apache.flink.table.planner.codegen.LookupJoinCodeGenerator.prepareParameters
+import org.apache.flink.table.runtime.types.LogicalTypeDataTypeConverter.fromLogicalTypeToDataType
 
 import scala.collection.JavaConverters._
 
@@ -98,6 +101,104 @@ object LookupJoinCodeGenerator {
       functionName,
       fieldCopy,
       bodyCode).tableFunc
+  }
+
+
+
+  def generateLookupKeyConvertFunction(
+                                        config: TableConfig,
+                                        typeFactory: FlinkTypeFactory,
+                                        inputType: LogicalType,
+                                        returnType: LogicalType,
+                                        tableReturnTypeInfo: TypeInformation[_],
+                                        lookupKeyInOrder: Array[Int],
+                                        allLookupFields: Map[Int, LookupKey],
+                                        enableObjectReuse: Boolean)
+  : GeneratedFunction[MapFunction[RowData, Array[Object]]]={
+    val ctx = CodeGeneratorContext(config)
+    val (prepareCode, parameters, nullInParameters) = prepareParameters(
+      ctx,
+      typeFactory,
+      inputType,
+      lookupKeyInOrder,
+      allLookupFields,
+      tableReturnTypeInfo.isInstanceOf[RowTypeInfo],
+      enableObjectReuse)
+
+    val body =
+      s"""
+         |$prepareCode
+         |if ($nullInParameters){
+         |  return null;
+         |}else{
+         |  return new Object[]{$parameters};
+         |}
+      """.stripMargin
+
+    FunctionCodeGenerator.generateFunction(
+      ctx,
+      "ConvertLookupKeyFunction",
+      classOf[MapFunction[RowData, Array[Object]]],
+      body,
+      returnType,
+      inputType)
+  }
+
+  /**
+   * Prepares parameters and returns (code, parameters)
+   */
+  private def prepareParameters(
+                                 ctx: CodeGeneratorContext,
+                                 typeFactory: FlinkTypeFactory,
+                                 inputType: LogicalType,
+                                 lookupKeyInOrder: Array[Int],
+                                 allLookupFields: Map[Int, LookupKey],
+                                 isExternalArgs: Boolean,
+                                 fieldCopy: Boolean): (String, String, String) = {
+
+    val inputFieldExprs = for (i <- lookupKeyInOrder) yield {
+      allLookupFields.get(i) match {
+        case Some(ConstantLookupKey(dataType, literal)) =>
+          generateLiteral(ctx, dataType, literal.getValue3)
+        case Some(FieldRefLookupKey(index)) =>
+          generateInputAccess(
+            ctx,
+            inputType,
+            DEFAULT_INPUT1_TERM,
+            index,
+            nullableInput = false,
+            fieldCopy)
+        case None =>
+          throw new CodeGenException("This should never happen!")
+      }
+    }
+    val codeAndArg = inputFieldExprs
+      .map { e =>
+        val dataType = fromLogicalTypeToDataType(e.resultType)
+        val bType = if (isExternalArgs) {
+          typeTerm(dataType.getConversionClass)
+        } else {
+          boxedTypeTermForType(e.resultType)
+        }
+        val assign = if (isExternalArgs) {
+          CodeGenUtils.genToExternal(ctx, dataType, e.resultTerm)
+        } else {
+          e.resultTerm
+        }
+        val newTerm = newName("arg")
+        val code =
+          s"""
+             |$bType $newTerm = null;
+             |if (!${e.nullTerm}) {
+             |  $newTerm = $assign;
+             |}
+             """.stripMargin
+        (code, newTerm, e.nullTerm)
+      }
+    (
+      codeAndArg.map(_._1).mkString("\n"),
+      codeAndArg.map(_._2).mkString(", "),
+      codeAndArg.map(_._3).mkString("|| "))
   }
 
   /**

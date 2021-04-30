@@ -464,7 +464,152 @@ public abstract class CommonExecLookupJoin extends ExecNodeBase<RowData>
                             rightRowType.getFieldCount());
         }
         return SimpleOperatorFactory.of(new ProcessOperator<>(processFunc));
+
+        val (laterJoinMs, laterRetryTimes) = temporalTable match {
+            case t: TableSourceTable =>
+                val tableSource = t.tableSource.asInstanceOf[LookupTableSource]
+                (tableSource.getLaterJoinMs, tableSource.getLaterJoinRetryTimes)
+            case _: LegacyTableSourceTable[_] =>
+                (FactoryUtil.LOOKUP_LATER_JOIN_LATENCY_MS.defaultValue().toMillis,
+                        FactoryUtil.LOOKUP_LATER_JOIN_RETRY_TIMES.defaultValue().intValue())
+        }
+        val miniBatchEnabled = CommonLookupJoin.isMiniBatchEnabled(config, syncLookupFunction)
+        val ctx = CodeGeneratorContext(config)
+        if (!miniBatchEnabled) {
+            val generatedFetcher = LookupJoinCodeGenerator.generateLookupFunction(
+                    config,
+                    relBuilder.getTypeFactory.asInstanceOf[FlinkTypeFactory],
+                    inputRowType,
+                    resultRowType,
+                    producedTypeInfo,
+                    lookupKeyIndicesInOrder,
+                    allLookupKeys,
+                    syncLookupFunction,
+                    env.getConfig.isObjectReuseEnabled)
+
+            val processFunc = if (calcOnTemporalTable.isDefined) {
+                // a projection or filter after table source scan
+                val rightRowType = FlinkTypeFactory
+                        .toLogicalRowType(calcOnTemporalTable.get.getOutputRowType)
+                val generatedCollector = generateCollector(
+                        ctx,
+                        inputRowType,
+                        rightRowType,
+                        resultRowType,
+                        remainingCondition,
+                        None)
+                val generatedCalc = generateCalcMapFunction(
+                        config,
+                        calcOnTemporalTable,
+                        tableSourceRowType)
+
+                if (laterJoinMs <= 0) {
+                    new LookupJoinWithCalcRunner(
+                            generatedFetcher,
+                            generatedCalc,
+                            generatedCollector,
+                            leftOuterJoin,
+                            rightRowType.getFieldCount)
+                } else {
+                    new LookupJoinWithCalcRetryRunner(
+                            generatedFetcher,
+                            generatedCalc,
+                            generatedCollector,
+                            inputTransformation.getOutputType.asInstanceOf[RowDataTypeInfo],
+                            leftOuterJoin,
+                            rightRowType.getFieldCount,
+                            laterJoinMs,
+                            laterRetryTimes)
+                }
+            } else {
+                // right type is the same as table source row type, because no calc after temporal table
+                val rightRowType = tableSourceRowType
+                val generatedCollector = generateCollector(
+                        ctx,
+                        inputRowType,
+                        rightRowType,
+                        resultRowType,
+                        remainingCondition,
+                        None)
+
+                if (laterJoinMs <= 0) {
+                    new LookupJoinRunner(
+                            generatedFetcher,
+                            generatedCollector,
+                            leftOuterJoin,
+                            rightRowType.getFieldCount)
+                } else {
+                    new LookupJoinWithRetryRunner(
+                            generatedFetcher,
+                            generatedCollector,
+                            inputTransformation.getOutputType.asInstanceOf[RowDataTypeInfo],
+                            leftOuterJoin,
+                            rightRowType.getFieldCount,
+                            laterJoinMs,
+                            laterRetryTimes)
+                }
+            }
+            SimpleOperatorFactory.of(new ProcessOperator(processFunc))
+        } else {
+            //mini batch enabled
+            val rightRowType = tableSourceRowType
+            val miniBatchSize = CommonLookupJoin.getMiniBatchSize(config, syncLookupFunction)
+            val generatedKeyConverter = LookupJoinCodeGenerator.generateLookupKeyConvertFunction(
+                    config,
+                    relBuilder.getTypeFactory.asInstanceOf[FlinkTypeFactory],
+                    inputRowType,
+                    resultRowType,
+                    producedTypeInfo,
+                    lookupKeyIndicesInOrder,
+                    allLookupKeys,
+                    env.getConfig.isObjectReuseEnabled)
+            val bundleFunction = if (calcOnTemporalTable.isDefined) {
+                val rightRowType = FlinkTypeFactory
+                        .toLogicalRowType(calcOnTemporalTable.get.getOutputRowType)
+                val generatedCollector = generateCollector(
+                        ctx,
+                        inputRowType,
+                        rightRowType,
+                        resultRowType,
+                        remainingCondition,
+                        None)
+                val generatedCalc = generateCalcMapFunction(
+                        config,
+                        calcOnTemporalTable,
+                        tableSourceRowType)
+                new LookupJoinBundleWithCalcFunction(
+                        generatedKeyConverter,
+                        generatedCalc,
+                        generatedCollector,
+                        lookupFunction.asInstanceOf[MiniBatchTableFunction[RowData]],
+                        inputRowType,
+                        leftOuterJoin,
+                        rightRowType.getFieldCount
+                )
+            } else {
+                val generatedCollector = generateCollector(
+                        ctx,
+                        inputRowType,
+                        rightRowType,
+                        resultRowType,
+                        remainingCondition,
+                        None)
+                new LookupJoinBundleFunction(
+                        generatedKeyConverter,
+                        generatedCollector,
+                        lookupFunction.asInstanceOf[MiniBatchTableFunction[RowData]],
+                        inputRowType,
+                        leftOuterJoin,
+                        rightRowType.getFieldCount)
+            }
+            val bundleOperator = new ListBundleOperator[RowData, RowData](
+                    bundleFunction,
+                    new CountBundleTrigger[RowData](miniBatchSize))
+            SimpleOperatorFactory.of(bundleOperator)
+        }
     }
+
+}
 
     // ----------------------------------------------------------------------------------------
     //                                       Validation

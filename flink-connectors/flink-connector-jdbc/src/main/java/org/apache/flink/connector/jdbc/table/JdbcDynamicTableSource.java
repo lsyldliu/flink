@@ -38,6 +38,7 @@ import org.apache.flink.table.utils.TableSchemaUtils;
 import org.apache.flink.util.Preconditions;
 
 import java.util.Objects;
+import java.util.Optional;
 
 /** A {@link DynamicTableSource} for JDBC. */
 @Internal
@@ -181,5 +182,10 @@ public class JdbcDynamicTableSource
     @Override
     public void applyLimit(long limit) {
         this.limit = limit;
+    }
+
+    @Override
+    public Optional<Boolean> isInputKeyByEnabled() {
+        return Optional.ofNullable(lookupOptions.isInputKeyByEnabled());
     }
 }

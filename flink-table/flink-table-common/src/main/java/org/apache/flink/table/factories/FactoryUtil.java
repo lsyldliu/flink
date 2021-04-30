@@ -98,6 +98,13 @@ public final class FactoryUtil {
                                     + "By default, if this option is not defined, the planner will derive the parallelism "
                                     + "for each statement individually by also considering the global configuration.");
 
+    public static final ConfigOption<Boolean> LOOKUP_ENABLE_INPUT_KEYBY = ConfigOptions
+            .key("lookup.enable-input-keyby")
+            .booleanType()
+            .noDefaultValue()
+            .withDescription("Optional. Flag to indicate whether to hash the input stream by join key.");
+
+
     /**
      * Suffix for keys of {@link ConfigOption} in case a connector requires multiple formats (e.g.
      * for both key and value).

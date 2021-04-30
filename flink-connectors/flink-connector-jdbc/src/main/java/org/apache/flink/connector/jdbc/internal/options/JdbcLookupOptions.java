@@ -20,6 +20,8 @@ package org.apache.flink.connector.jdbc.internal.options;
 
 import org.apache.flink.connector.jdbc.JdbcExecutionOptions;
 
+import javax.annotation.Nullable;
+
 import java.io.Serializable;
 import java.util.Objects;
 
@@ -29,11 +31,14 @@ public class JdbcLookupOptions implements Serializable {
     private final long cacheMaxSize;
     private final long cacheExpireMs;
     private final int maxRetryTimes;
+    @Nullable
+    private final Boolean isInputKeyByEnabled;
 
     public JdbcLookupOptions(long cacheMaxSize, long cacheExpireMs, int maxRetryTimes) {
         this.cacheMaxSize = cacheMaxSize;
         this.cacheExpireMs = cacheExpireMs;
         this.maxRetryTimes = maxRetryTimes;
+        this.isInputKeyByEnabled = isInputKeyByEnabled;
     }
 
     public long getCacheMaxSize() {
@@ -46,6 +51,11 @@ public class JdbcLookupOptions implements Serializable {
 
     public int getMaxRetryTimes() {
         return maxRetryTimes;
+    }
+
+    @Nullable
+    public Boolean isInputKeyByEnabled() {
+        return isInputKeyByEnabled;
     }
 
     public static Builder builder() {

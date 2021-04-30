@@ -44,6 +44,7 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
+import static org.apache.flink.table.factories.FactoryUtil.LOOKUP_ENABLE_INPUT_KEYBY;
 import static org.apache.flink.util.Preconditions.checkState;
 
 /**
@@ -240,7 +241,8 @@ public class JdbcDynamicTableFactory implements DynamicTableSourceFactory, Dynam
         return new JdbcLookupOptions(
                 readableConfig.get(LOOKUP_CACHE_MAX_ROWS),
                 readableConfig.get(LOOKUP_CACHE_TTL).toMillis(),
-                readableConfig.get(LOOKUP_MAX_RETRIES));
+                readableConfig.get(LOOKUP_MAX_RETRIES))
+        readableConfig.getOptional(LOOKUP_ENABLE_INPUT_KEYBY).orElse(null);
     }
 
     private JdbcExecutionOptions getJdbcExecutionOptions(ReadableConfig config) {
