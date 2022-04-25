@@ -50,4 +50,11 @@ public class FlinkCalciteSqlValidatorTest {
                 .hasMessageContaining(
                         "UPSERT INTO statement is not supported. Please use INSERT INTO instead.");
     }
+
+    @Test
+    public void test() {
+        long l = 50L;
+        int i = (int) l;
+        System.out.printf("" + i);
+    }
 }
