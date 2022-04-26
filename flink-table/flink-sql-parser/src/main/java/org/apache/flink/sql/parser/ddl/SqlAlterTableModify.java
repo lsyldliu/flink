@@ -19,6 +19,7 @@
 package org.apache.flink.sql.parser.ddl;
 
 import org.apache.flink.sql.parser.ddl.constraint.SqlTableConstraint;
+import org.apache.flink.sql.parser.ddl.position.SqlTableColumnPosition;
 
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
@@ -30,7 +31,9 @@ import org.apache.calcite.util.ImmutableNullableList;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * SqlNode to describe ALTER TABLE table_name MODIFY column/constraint/watermark clause.
@@ -80,6 +83,31 @@ public class SqlAlterTableModify extends SqlAlterTable {
                 modifiedColumns,
                 watermark,
                 new SqlNodeList(constraint, SqlParserPos.ZERO));
+    }
+
+    public SqlNodeList getColumns() {
+        return modifiedColumns;
+    }
+
+    @Nullable
+    public Optional<SqlWatermark> getWatermark() {
+        return Optional.ofNullable(watermark);
+    }
+
+    /** Returns the column constraints plus the table constraints. */
+    public List<SqlTableConstraint> getFullConstraints() {
+        List<SqlTableConstraint> ret = new ArrayList<>();
+        this.modifiedColumns.forEach(
+                column -> {
+                    SqlTableColumn tableColumn = ((SqlTableColumnPosition) column).getColumn();
+                    if (tableColumn instanceof SqlTableColumn.SqlRegularColumn) {
+                        SqlTableColumn.SqlRegularColumn regularColumn =
+                                (SqlTableColumn.SqlRegularColumn) tableColumn;
+                        regularColumn.getConstraint().map(ret::add);
+                    }
+                });
+        ret.addAll(this.constraint);
+        return ret;
     }
 
     @Override

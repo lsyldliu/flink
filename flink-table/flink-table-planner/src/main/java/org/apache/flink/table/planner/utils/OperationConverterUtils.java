@@ -19,10 +19,14 @@
 package org.apache.flink.table.planner.utils;
 
 import org.apache.flink.sql.parser.ddl.SqlAddReplaceColumns;
+import org.apache.flink.sql.parser.ddl.SqlAlterTableModify;
 import org.apache.flink.sql.parser.ddl.SqlChangeColumn;
 import org.apache.flink.sql.parser.ddl.SqlTableColumn;
 import org.apache.flink.sql.parser.ddl.SqlTableColumn.SqlRegularColumn;
 import org.apache.flink.sql.parser.ddl.SqlTableOption;
+import org.apache.flink.sql.parser.ddl.constraint.SqlTableConstraint;
+import org.apache.flink.sql.parser.ddl.position.SqlTableColumnPosition;
+import org.apache.flink.table.api.Schema;
 import org.apache.flink.table.api.TableColumn;
 import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.api.TableSchema;
@@ -34,6 +38,7 @@ import org.apache.flink.table.catalog.ObjectIdentifier;
 import org.apache.flink.table.operations.Operation;
 import org.apache.flink.table.operations.ddl.AlterTableSchemaOperation;
 import org.apache.flink.table.planner.calcite.FlinkTypeFactory;
+import org.apache.flink.table.planner.operations.MergeSchemaUtil;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.utils.TypeConversions;
@@ -49,6 +54,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /** Utils methods for converting sql to operations. */
@@ -142,6 +149,33 @@ public class OperationConverterUtils {
                         newProperties,
                         catalogTable.getComment()));
         // TODO: handle watermark and constraints
+    }
+
+    public static Operation convertAlterTableModify(
+            ObjectIdentifier tableIdentifier,
+            CatalogTable catalogTable,
+            SqlAlterTableModify sqlAlterTableModify,
+            SqlValidator sqlValidator,
+            Function<SqlNode, String> escapeExpression,
+            Consumer<SqlTableConstraint> validateTableConstraint) {
+        MergeSchemaUtil mergeSchemaUtil =
+                new MergeSchemaUtil(sqlValidator, escapeExpression, validateTableConstraint);
+        Schema modifiedSchema =
+                mergeSchemaUtil.mergeSchema(
+                        tableIdentifier,
+                        catalogTable.getUnresolvedSchema(),
+                        sqlAlterTableModify.getColumns().getList().stream()
+                                .map(SqlTableColumnPosition.class::cast)
+                                .collect(Collectors.toList()),
+                        sqlAlterTableModify.getWatermark().orElse(null),
+                        sqlAlterTableModify.getFullConstraints());
+        return new AlterTableSchemaOperation(
+                tableIdentifier,
+                CatalogTable.of(
+                        modifiedSchema,
+                        catalogTable.getComment(),
+                        catalogTable.getPartitionKeys(),
+                        catalogTable.getOptions()));
     }
 
     // change a column in the old table schema and return the updated table schema

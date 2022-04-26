@@ -27,6 +27,7 @@ import org.apache.flink.sql.parser.ddl.SqlAlterTable;
 import org.apache.flink.sql.parser.ddl.SqlAlterTableAddConstraint;
 import org.apache.flink.sql.parser.ddl.SqlAlterTableCompact;
 import org.apache.flink.sql.parser.ddl.SqlAlterTableDropConstraint;
+import org.apache.flink.sql.parser.ddl.SqlAlterTableModify;
 import org.apache.flink.sql.parser.ddl.SqlAlterTableOptions;
 import org.apache.flink.sql.parser.ddl.SqlAlterTableRename;
 import org.apache.flink.sql.parser.ddl.SqlAlterTableReset;
@@ -539,6 +540,14 @@ public class SqlToOperationConverter {
                     tableIdentifier,
                     optionalCatalogTable.get(),
                     (SqlAlterTableCompact) sqlAlterTable);
+        } else if (sqlAlterTable instanceof SqlAlterTableModify) {
+            return OperationConverterUtils.convertAlterTableModify(
+                    tableIdentifier,
+                    (CatalogTable) baseTable,
+                    (SqlAlterTableModify) sqlAlterTable,
+                    flinkPlanner.getOrCreateSqlValidator(),
+                    this::getQuotedSqlString,
+                    this::validateTableConstraint);
         } else {
             throw new ValidationException(
                     String.format(

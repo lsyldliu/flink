@@ -82,6 +82,7 @@ import org.apache.flink.table.operations.ddl.AlterTableAddConstraintOperation;
 import org.apache.flink.table.operations.ddl.AlterTableDropConstraintOperation;
 import org.apache.flink.table.operations.ddl.AlterTableOptionsOperation;
 import org.apache.flink.table.operations.ddl.AlterTableRenameOperation;
+import org.apache.flink.table.operations.ddl.AlterTableSchemaOperation;
 import org.apache.flink.table.operations.ddl.CreateCatalogFunctionOperation;
 import org.apache.flink.table.operations.ddl.CreateDatabaseOperation;
 import org.apache.flink.table.operations.ddl.CreateTableOperation;
@@ -1393,6 +1394,340 @@ public class SqlToOperationConverterTest {
         assertThatThrownBy(() -> parse("alter table tb1 drop constraint ct2", SqlDialect.DEFAULT))
                 .isInstanceOf(ValidationException.class)
                 .hasMessageContaining("CONSTRAINT [ct2] does not exist");
+    }
+
+    @Test
+    public void testAlterTableModifyColumn() throws Exception {
+        Catalog catalog = new GenericInMemoryCatalog("default", "default");
+        catalogManager.registerCatalog("cat1", catalog);
+        functionCatalog.registerTempCatalogScalarFunction(
+                ObjectIdentifier.of("cat1", "default", "my_udf1"), Func0$.MODULE$);
+
+        catalog.createDatabase("db1", new CatalogDatabaseImpl(new HashMap<>(), null), true);
+        CatalogTable catalogTable =
+                CatalogTable.of(
+                        Schema.newBuilder()
+                                .column("a", DataTypes.STRING().notNull())
+                                .column("b", DataTypes.INT().notNull())
+                                .column("c", DataTypes.INT())
+                                .column("d", DataTypes.BIGINT())
+                                .columnByExpression("e", "c - 1")
+                                .columnByExpression("f", "cat1.`default`.my_udf1(c) + 1")
+                                .columnByMetadata("h", DataTypes.INT(), true)
+                                .build(),
+                        "tb1",
+                        Collections.emptyList(),
+                        Collections.emptyMap());
+        catalogManager.setCurrentCatalog("cat1");
+        catalogManager.setCurrentDatabase("db1");
+        catalog.createTable(new ObjectPath("db1", "tb1"), catalogTable, true);
+
+        // modify column which is not in table
+        assertThatThrownBy(() -> parse("alter table tb1 modify non_c bigint", SqlDialect.DEFAULT))
+                .isInstanceOf(ValidationException.class)
+                .hasMessageContaining("Column non_c was not found in table `cat1`.`db1`.`tb1`.");
+
+        // modify single physical column which refer to not existed column
+        assertThatThrownBy(
+                        () ->
+                                parse(
+                                        "alter table tb1 modify d STRING after non_c",
+                                        SqlDialect.DEFAULT))
+                .isInstanceOf(ValidationException.class)
+                .hasMessageContaining(
+                        "The column 'non_c' referenced by column 'd' was not found in table `cat1`.`db1`.`tb1`.");
+
+        // modify single physical column
+        Operation operation =
+                parse("alter table tb1 modify b bigint comment 'test modify'", SqlDialect.DEFAULT);
+        assert operation instanceof AlterTableSchemaOperation;
+        Schema actual =
+                ((AlterTableSchemaOperation) operation).getCatalogTable().getUnresolvedSchema();
+        Schema expected =
+                Schema.newBuilder()
+                        .column("a", DataTypes.STRING().notNull())
+                        .column("b", DataTypes.BIGINT())
+                        .withComment("test modify")
+                        .column("c", DataTypes.INT())
+                        .column("d", DataTypes.BIGINT())
+                        .columnByExpression("e", "c - 1")
+                        .columnByExpression("f", "cat1.`default`.my_udf1(c) + 1")
+                        .columnByMetadata("h", DataTypes.INT(), true)
+                        .build();
+        assertThat(expected).isEqualTo(actual);
+
+        // modify single physical column and change its position to first
+        Operation operation2 = parse("alter table tb1 modify b bigint first", SqlDialect.DEFAULT);
+        assert operation2 instanceof AlterTableSchemaOperation;
+        Schema actual2 =
+                ((AlterTableSchemaOperation) operation2).getCatalogTable().getUnresolvedSchema();
+        Schema expected2 =
+                Schema.newBuilder()
+                        .column("b", DataTypes.BIGINT())
+                        .column("a", DataTypes.STRING().notNull())
+                        .column("c", DataTypes.INT())
+                        .column("d", DataTypes.BIGINT())
+                        .columnByExpression("e", "c - 1")
+                        .columnByExpression("f", "cat1.`default`.my_udf1(c) + 1")
+                        .columnByMetadata("h", DataTypes.INT(), true)
+                        .build();
+        assertThat(expected2).isEqualTo(actual2);
+
+        // modify single physical column to specific position
+        Operation operation3 = parse("alter table tb1 modify b bigint after f", SqlDialect.DEFAULT);
+        assert operation3 instanceof AlterTableSchemaOperation;
+        Schema actual3 =
+                ((AlterTableSchemaOperation) operation3).getCatalogTable().getUnresolvedSchema();
+        Schema expected3 =
+                Schema.newBuilder()
+                        .column("a", DataTypes.STRING().notNull())
+                        .column("c", DataTypes.INT())
+                        .column("d", DataTypes.BIGINT())
+                        .columnByExpression("e", "c - 1")
+                        .columnByExpression("f", "cat1.`default`.my_udf1(c) + 1")
+                        .column("b", DataTypes.BIGINT())
+                        .columnByMetadata("h", DataTypes.INT(), true)
+                        .build();
+        assertThat(expected3).isEqualTo(actual3);
+
+        // modify single computed column
+        Operation operation4 =
+                parse(
+                        "alter table tb1 modify e AS cat1.`default`.my_udf1(c) + 10 after f",
+                        SqlDialect.DEFAULT);
+        assert operation4 instanceof AlterTableSchemaOperation;
+        Schema actual4 =
+                ((AlterTableSchemaOperation) operation4).getCatalogTable().getUnresolvedSchema();
+        Schema expected4 =
+                Schema.newBuilder()
+                        .column("a", DataTypes.STRING().notNull())
+                        .column("b", DataTypes.INT().notNull())
+                        .column("c", DataTypes.INT())
+                        .column("d", DataTypes.BIGINT())
+                        .columnByExpression("f", "cat1.`default`.my_udf1(c) + 1")
+                        .columnByExpression("e", "`cat1`.`default`.`my_udf1`(`c`) + 10")
+                        .columnByMetadata("h", DataTypes.INT(), true)
+                        .build();
+        assertThat(expected4).isEqualTo(actual4);
+
+        // modify single metadata column
+        Operation operation5 =
+                parse("alter table tb1 modify h bigint metadata from 'd'", SqlDialect.DEFAULT);
+        assert operation5 instanceof AlterTableSchemaOperation;
+        Schema actual5 =
+                ((AlterTableSchemaOperation) operation5).getCatalogTable().getUnresolvedSchema();
+        Schema expected5 =
+                Schema.newBuilder()
+                        .column("a", DataTypes.STRING().notNull())
+                        .column("b", DataTypes.INT().notNull())
+                        .column("c", DataTypes.INT())
+                        .column("d", DataTypes.BIGINT())
+                        .columnByExpression("e", "c - 1")
+                        .columnByExpression("f", "cat1.`default`.my_udf1(c) + 1")
+                        .columnByMetadata("h", DataTypes.BIGINT(), "d")
+                        .build();
+        assertThat(expected5).isEqualTo(actual5);
+
+        // modify multiple column and change its position
+        Operation operation6 =
+                parse(
+                        "alter table tb1 modify (\n"
+                                + "   b bigint first,\n"
+                                + "   e AS cat1.`default`.my_udf1(c) + 10 after f,\n"
+                                + "   h bigint metadata from 'd'\n"
+                                + ")",
+                        SqlDialect.DEFAULT);
+        assert operation6 instanceof AlterTableSchemaOperation;
+        Schema actual6 =
+                ((AlterTableSchemaOperation) operation6).getCatalogTable().getUnresolvedSchema();
+        Schema expected6 =
+                Schema.newBuilder()
+                        .column("b", DataTypes.BIGINT())
+                        .column("a", DataTypes.STRING().notNull())
+                        .column("c", DataTypes.INT())
+                        .column("d", DataTypes.BIGINT())
+                        .columnByExpression("f", "cat1.`default`.my_udf1(c) + 1")
+                        .columnByExpression("e", "`cat1`.`default`.`my_udf1`(`c`) + 10")
+                        .columnByMetadata("h", DataTypes.BIGINT(), "d")
+                        .build();
+        assertThat(expected6).isEqualTo(actual6);
+    }
+
+    @Test
+    public void testAlterTableModifyWatermark() throws Exception {
+        Catalog catalog = new GenericInMemoryCatalog("default", "default");
+        catalogManager.registerCatalog("cat1", catalog);
+
+        catalog.createDatabase("db1", new CatalogDatabaseImpl(new HashMap<>(), null), true);
+        CatalogTable catalogTable =
+                CatalogTable.of(
+                        Schema.newBuilder()
+                                .column("a", DataTypes.STRING().notNull())
+                                .column("b", DataTypes.INT().notNull())
+                                .column("c", DataTypes.TIMESTAMP(3).notNull())
+                                .build(),
+                        "tb1",
+                        Collections.emptyList(),
+                        Collections.emptyMap());
+        catalogManager.setCurrentCatalog("cat1");
+        catalogManager.setCurrentDatabase("db1");
+        catalog.createTable(new ObjectPath("db1", "tb1"), catalogTable, true);
+
+        // modify watermark when table has not defined it
+        assertThatThrownBy(
+                        () ->
+                                parse(
+                                        "alter table tb1 modify watermark for c as c - interval '3' second",
+                                        SqlDialect.DEFAULT))
+                .isInstanceOf(ValidationException.class)
+                .hasMessageContaining(
+                        "Table `cat1`.`db1`.`tb1` does not define watermark, "
+                                + "currently not allowed to modify watermark c which was not found in table.");
+
+        CatalogTable catalogTable2 =
+                CatalogTable.of(
+                        Schema.newBuilder()
+                                .column("a", DataTypes.STRING().notNull())
+                                .column("b", DataTypes.INT().notNull())
+                                .column("c", DataTypes.TIMESTAMP(3).notNull())
+                                .column("d", DataTypes.TIMESTAMP(2).notNull())
+                                .watermark("c", "c - INTERVAL '3' SECOND")
+                                .build(),
+                        "tb2",
+                        Collections.emptyList(),
+                        Collections.emptyMap());
+        catalog.createTable(new ObjectPath("db1", "tb2"), catalogTable2, true);
+
+        // modify watermark of the specific column is inconsistent with origin table watermark
+        // column
+        assertThatThrownBy(
+                        () ->
+                                parse(
+                                        "alter table tb2 modify watermark for d as d - interval '3' second",
+                                        SqlDialect.DEFAULT))
+                .isInstanceOf(ValidationException.class)
+                .hasMessageContaining(
+                        "Currently not allowed to modify watermark `d` which is inconsistent "
+                                + "with table original watermark `c`.");
+        // modify watermark
+        Operation operation =
+                parse(
+                        "alter table tb2 modify watermark for c as c - interval '10' second",
+                        SqlDialect.DEFAULT);
+        assert operation instanceof AlterTableSchemaOperation;
+        Schema actual =
+                ((AlterTableSchemaOperation) operation).getCatalogTable().getUnresolvedSchema();
+        Schema expected =
+                Schema.newBuilder()
+                        .column("a", DataTypes.STRING().notNull())
+                        .column("b", DataTypes.INT().notNull())
+                        .column("c", DataTypes.TIMESTAMP(3).notNull())
+                        .column("d", DataTypes.TIMESTAMP(2).notNull())
+                        .watermark("c", "`c` - INTERVAL '10' SECOND")
+                        .build();
+        assertThat(expected).isEqualTo(actual);
+    }
+
+    @Test
+    public void testAlterTableModifyConstraint() throws Exception {
+        Catalog catalog = new GenericInMemoryCatalog("default", "default");
+        catalogManager.registerCatalog("cat1", catalog);
+        catalog.createDatabase("db1", new CatalogDatabaseImpl(new HashMap<>(), null), true);
+        CatalogTable catalogTable =
+                CatalogTable.of(
+                        Schema.newBuilder()
+                                .column("a", DataTypes.STRING().notNull())
+                                .column("b", DataTypes.INT().notNull())
+                                .column("c", DataTypes.INT())
+                                .build(),
+                        "tb1",
+                        Collections.emptyList(),
+                        Collections.emptyMap());
+        catalogManager.setCurrentCatalog("cat1");
+        catalogManager.setCurrentDatabase("db1");
+        catalog.createTable(new ObjectPath("db1", "tb1"), catalogTable, true);
+
+        // modify unique constraint
+        assertThatThrownBy(
+                        () ->
+                                parse(
+                                        "alter table tb1 modify UNIQUE(a, b) not enforced",
+                                        SqlDialect.DEFAULT))
+                .isInstanceOf(UnsupportedOperationException.class)
+                .hasMessageContaining("UNIQUE constraint is not supported yet");
+
+        // modify primary key of enforced mode
+        assertThatThrownBy(
+                        () ->
+                                parse(
+                                        "alter table tb1 modify constraint ct1 primary key(a, b) enforced",
+                                        SqlDialect.DEFAULT))
+                .isInstanceOf(ValidationException.class)
+                .hasMessageContaining(
+                        "Flink doesn't support ENFORCED mode for PRIMARY KEY constraint. ENFORCED/NOT ENFORCED  "
+                                + "controls if the constraint checks are performed on the incoming/outgoing data. "
+                                + "Flink does not own the data therefore the only supported mode is the NOT ENFORCED mode");
+
+        // modify primary key when table has not defined it
+        assertThatThrownBy(
+                        () ->
+                                parse(
+                                        "alter table tb1 modify constraint ct1 primary key(a, b) not enforced",
+                                        SqlDialect.DEFAULT))
+                .isInstanceOf(ValidationException.class)
+                .hasMessageContaining(
+                        "Table `cat1`.`db1`.`tb1` does not define primary key, currently not allowed to "
+                                + "modify primary key which was not found in table.");
+
+        functionCatalog.registerTempCatalogScalarFunction(
+                ObjectIdentifier.of("cat1", "default", "my_udf1"), Func0$.MODULE$);
+        CatalogTable catalogTable2 =
+                CatalogTable.of(
+                        Schema.newBuilder()
+                                .column("a", DataTypes.STRING().notNull())
+                                .column("b", DataTypes.INT().notNull())
+                                .column("c", DataTypes.INT())
+                                .column("d", DataTypes.INT())
+                                .column("e", DataTypes.STRING())
+                                .column("f", DataTypes.TIMESTAMP(3).notNull())
+                                .columnByMetadata("m", DataTypes.INT(), true)
+                                .columnByExpression("g", "TO_TIMESTAMP(e)")
+                                .watermark("f", "f - INTERVAL '5' SECOND")
+                                .primaryKey("a", "b")
+                                .build(),
+                        "tb2",
+                        Collections.emptyList(),
+                        Collections.emptyMap());
+        catalog.createTable(new ObjectPath("db1", "tb2"), catalogTable2, true);
+
+        // modify primary key and column simultaneously
+        Operation operation =
+                parse(
+                        "alter table tb2 modify (\n"
+                                + "   b bigint first,\n"
+                                + "   d AS cat1.`default`.my_udf1(c) + 10 after f,\n"
+                                + "   m int metadata from 'c',\n"
+                                + "   constraint m_ct primary key (a) not enforced,\n"
+                                + "   watermark for f as g - interval '5' second\n"
+                                + ")",
+                        SqlDialect.DEFAULT);
+        assert operation instanceof AlterTableSchemaOperation;
+        Schema actual =
+                ((AlterTableSchemaOperation) operation).getCatalogTable().getUnresolvedSchema();
+        Schema expected =
+                Schema.newBuilder()
+                        .column("b", DataTypes.BIGINT())
+                        .column("a", DataTypes.STRING().notNull())
+                        .column("c", DataTypes.INT())
+                        .column("e", DataTypes.STRING())
+                        .column("f", DataTypes.TIMESTAMP(3).notNull())
+                        .columnByExpression("d", "`cat1`.`default`.`my_udf1`(`c`) + 10")
+                        .columnByMetadata("m", DataTypes.INT(), "c")
+                        .columnByExpression("g", "TO_TIMESTAMP(e)")
+                        .watermark("f", "`g` - INTERVAL '5' SECOND")
+                        .primaryKeyNamed("m_ct", "a")
+                        .build();
+        assertThat(expected).isEqualTo(actual);
     }
 
     @Test
