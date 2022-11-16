@@ -1466,7 +1466,7 @@ public class HiveCatalog extends AbstractCatalog {
                 );
     }
 
-    private static boolean isTablePartitioned(Table hiveTable) {
+    protected static boolean isTablePartitioned(Table hiveTable) {
         return hiveTable.getPartitionKeysSize() != 0;
     }
 

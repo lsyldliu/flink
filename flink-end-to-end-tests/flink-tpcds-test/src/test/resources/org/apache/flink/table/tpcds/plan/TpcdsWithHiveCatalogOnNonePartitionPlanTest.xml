@@ -1,0 +1,133 @@
+<?xml version="1.0" ?>
+<!--
+Licensed to the Apache Software Foundation (ASF) under one or more
+contributor license agreements.  See the NOTICE file distributed with
+this work for additional information regarding copyright ownership.
+The ASF licenses this file to you under the Apache License, Version 2.0
+(the "License"); you may not use this file except in compliance with
+the License.  You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+<Root>
+  <TestCase name="getExecPlan[q1]">
+    <Resource name="sql">
+      <![CDATA[/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+-- start query 1 in stream 0 using template query1.tpl and seed 2031708268
+with customer_total_return as
+(select sr_customer_sk as ctr_customer_sk
+,sr_store_sk as ctr_store_sk
+,sum(sr_fee) as ctr_total_return
+from store_returns
+,date_dim
+where sr_returned_date_sk = d_date_sk
+and d_year =2000
+group by sr_customer_sk
+,sr_store_sk)
+ select  c_customer_id
+from customer_total_return ctr1
+,store
+,customer
+where ctr1.ctr_total_return > (select avg(ctr_total_return)*1.2
+from customer_total_return ctr2
+where ctr1.ctr_store_sk = ctr2.ctr_store_sk)
+and s_store_sk = ctr1.ctr_store_sk
+and s_state = 'NM'
+and ctr1.ctr_customer_sk = c_customer_sk
+order by c_customer_id
+limit 100
+
+-- end query 1 in stream 0 using template query1.tpl
+]]>
+    </Resource>
+    <Resource name="ast">
+      <![CDATA[
+LogicalSort(sort0=[$0], dir0=[ASC-nulls-first], fetch=[100])
++- LogicalProject(c_customer_id=[$33])
+   +- LogicalFilter(condition=[AND(>($2, $SCALAR_QUERY({
+LogicalProject(EXPR$0=[*($0, 1.2:DECIMAL(2, 1))])
+  LogicalAggregate(group=[{}], agg#0=[AVG($0)])
+    LogicalProject(ctr_total_return=[$2])
+      LogicalFilter(condition=[=($cor0.ctr_store_sk, $1)])
+        LogicalAggregate(group=[{0, 1}], ctr_total_return=[SUM($2)])
+          LogicalProject(ctr_customer_sk=[$3], ctr_store_sk=[$7], sr_fee=[$14])
+            LogicalFilter(condition=[AND(=($0, $20), =($26, 2000))])
+              LogicalJoin(condition=[true], joinType=[inner])
+                LogicalTableScan(table=[[hive, tpcds_bin_orc_10000, store_returns]])
+                LogicalTableScan(table=[[hive, tpcds_bin_orc_10000, date_dim]])
+})), =($3, $1), =($27, _UTF-16LE'NM'), =($0, $32))], variablesSet=[[$cor0]])
+      +- LogicalJoin(condition=[true], joinType=[inner])
+         :- LogicalJoin(condition=[true], joinType=[inner])
+         :  :- LogicalAggregate(group=[{0, 1}], ctr_total_return=[SUM($2)])
+         :  :  +- LogicalProject(ctr_customer_sk=[$3], ctr_store_sk=[$7], sr_fee=[$14])
+         :  :     +- LogicalFilter(condition=[AND(=($0, $20), =($26, 2000))])
+         :  :        +- LogicalJoin(condition=[true], joinType=[inner])
+         :  :           :- LogicalTableScan(table=[[hive, tpcds_bin_orc_10000, store_returns]])
+         :  :           +- LogicalTableScan(table=[[hive, tpcds_bin_orc_10000, date_dim]])
+         :  +- LogicalTableScan(table=[[hive, tpcds_bin_orc_10000, store]])
+         +- LogicalTableScan(table=[[hive, tpcds_bin_orc_10000, customer]])
+]]>
+    </Resource>
+    <Resource name="optimized exec plan">
+      <![CDATA[
+Calc(select=[c_customer_id])
++- SortLimit(orderBy=[c_customer_id ASC], offset=[0], fetch=[100], global=[true])
+   +- Exchange(distribution=[single])
+      +- SortLimit(orderBy=[c_customer_id ASC], offset=[0], fetch=[100], global=[false])
+         +- HashJoin(joinType=[InnerJoin], where=[((ctr_store_sk = ctr_store_sk0) AND (ctr_total_return > ($f1 * 1.2)))], select=[ctr_store_sk, ctr_total_return, c_customer_id, ctr_store_sk0, $f1], isBroadcast=[true], build=[right])
+            :- Exchange(distribution=[any])
+            :  +- Calc(select=[ctr_store_sk, ctr_total_return, c_customer_id])
+            :     +- HashJoin(joinType=[InnerJoin], where=[(ctr_customer_sk = c_customer_sk)], select=[ctr_customer_sk, ctr_store_sk, ctr_total_return, c_customer_sk, c_customer_id], build=[right])
+            :        :- Exchange(distribution=[hash[ctr_customer_sk]])
+            :        :  +- Calc(select=[ctr_customer_sk, ctr_store_sk, ctr_total_return])
+            :        :     +- MultipleInput(readOrder=[0,1], members=[\nHashJoin(joinType=[InnerJoin], where=[(s_store_sk = ctr_store_sk)], select=[ctr_customer_sk, ctr_store_sk, ctr_total_return, s_store_sk], isBroadcast=[true], build=[right])\n:- HashAggregate(isMerge=[false], groupBy=[ctr_customer_sk, ctr_store_sk], select=[ctr_customer_sk, ctr_store_sk, SUM(sr_fee) AS ctr_total_return])\n:  +- [#2] Exchange(distribution=[hash[ctr_customer_sk, ctr_store_sk]])\n+- [#1] Exchange(distribution=[broadcast])\n])
+            :        :        :- Exchange(distribution=[broadcast])
+            :        :        :  +- Calc(select=[s_store_sk], where=[(s_state = 'NM')])
+            :        :        :     +- TableSourceScan(table=[[hive, tpcds_bin_orc_10000, store, project=[s_store_sk, s_state]]], fields=[s_store_sk, s_state])
+            :        :        +- Exchange(distribution=[hash[ctr_customer_sk, ctr_store_sk]])
+            :        :           +- Calc(select=[sr_customer_sk AS ctr_customer_sk, sr_store_sk AS ctr_store_sk, sr_fee])
+            :        :              +- MultipleInput(readOrder=[0,1], members=[\nHashJoin(joinType=[InnerJoin], where=[(sr_returned_date_sk = d_date_sk)], select=[sr_returned_date_sk, sr_customer_sk, sr_store_sk, sr_fee, d_date_sk], isBroadcast=[true], build=[right])\n:- Calc(select=[sr_returned_date_sk, sr_customer_sk, sr_store_sk, sr_fee], where=[sr_returned_date_sk IS NOT NULL])\n:  +- [#2] TableSourceScan(table=[[hive, tpcds_bin_orc_10000, store_returns, project=[sr_returned_date_sk, sr_customer_sk, sr_store_sk, sr_fee]]], fields=[sr_returned_date_sk, sr_customer_sk, sr_store_sk, sr_fee])\n+- [#1] Exchange(distribution=[broadcast])\n])
+            :        :                 :- Exchange(distribution=[broadcast])(reuse_id=[1])
+            :        :                 :  +- Calc(select=[d_date_sk], where=[(d_year = 2000)])
+            :        :                 :     +- TableSourceScan(table=[[hive, tpcds_bin_orc_10000, date_dim, project=[d_date_sk, d_year]]], fields=[d_date_sk, d_year])
+            :        :                 +- TableSourceScan(table=[[hive, tpcds_bin_orc_10000, store_returns, project=[sr_returned_date_sk, sr_customer_sk, sr_store_sk, sr_fee]]], fields=[sr_returned_date_sk, sr_customer_sk, sr_store_sk, sr_fee])(reuse_id=[2])
+            :        +- Exchange(distribution=[hash[c_customer_sk]])
+            :           +- TableSourceScan(table=[[hive, tpcds_bin_orc_10000, customer, project=[c_customer_sk, c_customer_id]]], fields=[c_customer_sk, c_customer_id])
+            +- Exchange(distribution=[broadcast])
+               +- HashAggregate(isMerge=[true], groupBy=[ctr_store_sk], select=[ctr_store_sk, Final_AVG(sum$0, count$1) AS $f1])
+                  +- Exchange(distribution=[hash[ctr_store_sk]])
+                     +- LocalHashAggregate(groupBy=[ctr_store_sk], select=[ctr_store_sk, Partial_AVG(ctr_total_return) AS (sum$0, count$1)])
+                        +- Calc(select=[ctr_store_sk, ctr_total_return])
+                           +- HashAggregate(isMerge=[false], groupBy=[ctr_customer_sk, ctr_store_sk], select=[ctr_customer_sk, ctr_store_sk, SUM(sr_fee) AS ctr_total_return])
+                              +- Exchange(distribution=[hash[ctr_customer_sk, ctr_store_sk]])
+                                 +- Calc(select=[sr_customer_sk AS ctr_customer_sk, sr_store_sk AS ctr_store_sk, sr_fee])
+                                    +- MultipleInput(readOrder=[0,1], members=[\nHashJoin(joinType=[InnerJoin], where=[(sr_returned_date_sk = d_date_sk)], select=[sr_returned_date_sk, sr_customer_sk, sr_store_sk, sr_fee, d_date_sk], isBroadcast=[true], build=[right])\n:- Calc(select=[sr_returned_date_sk, sr_customer_sk, sr_store_sk, sr_fee], where=[(sr_returned_date_sk IS NOT NULL AND sr_store_sk IS NOT NULL)])\n:  +- [#2] TableSourceScan(table=[[hive, tpcds_bin_orc_10000, store_returns, project=[sr_returned_date_sk, sr_customer_sk, sr_store_sk, sr_fee]]], fields=[sr_returned_date_sk, sr_customer_sk, sr_store_sk, sr_fee])\n+- [#1] Exchange(distribution=[broadcast])\n])
+                                       :- Reused(reference_id=[1])
+                                       +- Reused(reference_id=[2])
+]]>
+    </Resource>
+  </TestCase>
+</Root>
