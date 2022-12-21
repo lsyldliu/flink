@@ -18,17 +18,41 @@
 
 package org.apache.flink.table.tpcds.plan;
 
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.connectors.hive.HiveOptions;
+import org.apache.flink.runtime.testutils.MiniClusterResourceConfiguration;
 import org.apache.flink.table.api.ExplainDetail;
 import org.apache.flink.table.api.config.ExecutionConfigOptions;
 import org.apache.flink.table.catalog.exceptions.DatabaseNotExistException;
 import org.apache.flink.table.catalog.hive.HiveCatalog;
+import org.apache.flink.test.util.MiniClusterWithClientResource;
 
+import org.junit.ClassRule;
 import org.junit.Test;
 
 import java.util.List;
 
 public class TpcdsWithHiveCatalogOnMultiPartitionPlanTest extends TpcdsPlanTest {
+
+    public static final int DEFAULT_PARALLELISM = 3;
+
+    @ClassRule
+    public static MiniClusterWithClientResource miniClusterResource =
+            new MiniClusterWithClientResource(
+                    new MiniClusterResourceConfiguration.Builder()
+                            .setConfiguration(getConfiguration())
+                            .setNumberTaskManagers(1)
+                            .setNumberSlotsPerTaskManager(DEFAULT_PARALLELISM)
+                            .build());
+
+    private static Configuration getConfiguration() {
+        Configuration config = new Configuration();
+        config.set(TaskManagerOptions.MANAGED_MEMORY_SIZE, MemorySize.parse("100m"));
+        return config;
+    }
+
     private static String scale = "10000";
     private static String multiPartition_database = "tpcds_bin_partitioned_orc_" + scale;
     private static String database = "tpcds_bin_orc_" + scale;
@@ -44,7 +68,7 @@ public class TpcdsWithHiveCatalogOnMultiPartitionPlanTest extends TpcdsPlanTest 
         tEnv.useCatalog("hive");
 
         String sql = getSqlFile(caseName);
-        util.verifyExecPlan(removeLicense(sql));
+        tEnv.executeSql(removeLicense(sql));
     }
 
     @Test

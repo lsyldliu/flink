@@ -34,17 +34,21 @@ import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 import org.apache.flink.table.planner.plan.nodes.exec.SingleTransformationTranslator;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.ExecNodeUtil;
 import org.apache.flink.table.planner.plan.nodes.exec.visitor.AbstractExecNodeExactlyOnceVisitor;
+import org.apache.flink.table.runtime.operators.multipleinput.BatchBHJMultipleInputStreamOperatorFactory;
 import org.apache.flink.table.runtime.operators.multipleinput.BatchMultipleInputStreamOperatorFactory;
 import org.apache.flink.table.runtime.operators.multipleinput.TableOperatorWrapperGenerator;
 import org.apache.flink.table.runtime.operators.multipleinput.input.InputSpec;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
 
 import org.apache.commons.lang3.tuple.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.table.api.config.ExecutionConfigOptions.TABLE_EXEC_MULTIPLE_INPUT_BHJ;
 import static org.apache.flink.util.Preconditions.checkArgument;
 
 /**
@@ -76,6 +80,8 @@ import static org.apache.flink.util.Preconditions.checkArgument;
  */
 public class BatchExecMultipleInput extends ExecNodeBase<RowData>
         implements BatchExecNode<RowData>, SingleTransformationTranslator<RowData> {
+
+    private static final Logger LOG = LoggerFactory.getLogger(BatchExecMultipleInput.class);
 
     private final ExecNode<?> rootNode;
     private final List<ExecEdge> originalEdges;
@@ -119,22 +125,43 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
         final List<Pair<Transformation<?>, InputSpec>> inputTransformAndInputSpecPairs =
                 generator.getInputTransformAndInputSpecPairs();
 
-        final MultipleInputTransformation<RowData> multipleInputTransform =
-                new MultipleInputTransformation<>(
-                        createTransformationName(config),
-                        new BatchMultipleInputStreamOperatorFactory(
-                                inputTransformAndInputSpecPairs.stream()
-                                        .map(Pair::getValue)
-                                        .collect(Collectors.toList()),
-                                generator.getHeadWrappers(),
-                                generator.getTailWrapper()),
-                        InternalTypeInfo.of(getOutputType()),
-                        generator.getParallelism(),
-                        false);
+        boolean multipleInputBhj = config.get(TABLE_EXEC_MULTIPLE_INPUT_BHJ);
+
+        MultipleInputTransformation<RowData> multipleInputTransform;
+        if (multipleInputBhj) {
+            multipleInputTransform =
+                    new MultipleInputTransformation<>(
+                            createTransformationName(config),
+                            new BatchBHJMultipleInputStreamOperatorFactory(
+                                    inputTransformAndInputSpecPairs.stream()
+                                            .map(Pair::getValue)
+                                            .collect(Collectors.toList())),
+                            InternalTypeInfo.of(getOutputType()),
+                            generator.getParallelism());
+        } else {
+            multipleInputTransform =
+                    new MultipleInputTransformation<>(
+                            createTransformationName(config),
+                            new BatchMultipleInputStreamOperatorFactory(
+                                    inputTransformAndInputSpecPairs.stream()
+                                            .map(Pair::getValue)
+                                            .collect(Collectors.toList()),
+                                    generator.getHeadWrappers(),
+                                    generator.getTailWrapper()),
+                            InternalTypeInfo.of(getOutputType()),
+                            generator.getParallelism());
+        }
+
         multipleInputTransform.setDescription(createTransformationDescription(config));
+        // here set the all elements of InputTransformation and its id index indicates the order
         inputTransformAndInputSpecPairs.forEach(
                 input -> multipleInputTransform.addInput(input.getKey()));
-
+        LOG.info(
+                "BatchExecMultiInput transformation description: \n{}.",
+                multipleInputTransform.getDescription());
+        LOG.info(
+                "BatchExecMultiInput inputTransformAndInputSpecPairs: \n{}.",
+                inputTransformAndInputSpecPairs);
         if (generator.getMaxParallelism() > 0) {
             multipleInputTransform.setMaxParallelism(generator.getMaxParallelism());
         }

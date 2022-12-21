@@ -108,7 +108,13 @@ under the License.
 			<artifactId>hadoop-mapreduce-client-jobclient</artifactId>
 			<version>${flink.hadoop.version}</version>
 		</dependency>
-	</dependencies>
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-test-utils</artifactId>
+            <version>1.17-SNAPSHOT</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 
 	<build>
 		<plugins>
