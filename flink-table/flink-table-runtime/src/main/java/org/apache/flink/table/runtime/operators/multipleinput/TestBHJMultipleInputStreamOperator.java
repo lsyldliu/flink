@@ -29,6 +29,7 @@ import org.apache.flink.streaming.api.operators.InputSelection;
 import org.apache.flink.streaming.api.operators.MultipleInputStreamOperator;
 import org.apache.flink.streaming.api.operators.StreamOperatorParameters;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
+import org.apache.flink.table.api.config.ExecutionConfigOptions;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.runtime.operators.multipleinput.input.InputSelectionHandler;
 import org.apache.flink.table.runtime.operators.multipleinput.input.InputSpec;
@@ -247,8 +248,12 @@ public class TestBHJMultipleInputStreamOperator extends AbstractStreamOperatorV2
 
         public LongHashTable$570(StreamOperatorParameters<RowData> parameters) {
             super(
-                    parameters.getContainingTask().getJobConfiguration(),
                     parameters.getContainingTask(),
+                    ExecutionConfigOptions.TABLE_EXEC_SPILL_COMPRESSION_ENABLED.defaultValue(),
+                    (int)
+                            ExecutionConfigOptions.TABLE_EXEC_SPILL_COMPRESSION_BLOCK_SIZE
+                                    .defaultValue()
+                                    .getBytes(),
                     buildSer$571,
                     probeSer$572,
                     parameters.getContainingTask().getEnvironment().getMemoryManager(),

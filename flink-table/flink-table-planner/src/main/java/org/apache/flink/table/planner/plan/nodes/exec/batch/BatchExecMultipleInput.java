@@ -34,7 +34,7 @@ import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 import org.apache.flink.table.planner.plan.nodes.exec.SingleTransformationTranslator;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.ExecNodeUtil;
 import org.apache.flink.table.planner.plan.nodes.exec.visitor.AbstractExecNodeExactlyOnceVisitor;
-import org.apache.flink.table.runtime.operators.multipleinput.BatchBHJMultipleInputStreamOperatorFactory;
+import org.apache.flink.table.runtime.operators.multipleinput.BatchMultipleFusionStreamOperatorFactory;
 import org.apache.flink.table.runtime.operators.multipleinput.BatchMultipleInputStreamOperatorFactory;
 import org.apache.flink.table.runtime.operators.multipleinput.TableOperatorWrapperGenerator;
 import org.apache.flink.table.runtime.operators.multipleinput.input.InputSpec;
@@ -132,12 +132,13 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
             multipleInputTransform =
                     new MultipleInputTransformation<>(
                             createTransformationName(config),
-                            new BatchBHJMultipleInputStreamOperatorFactory(
+                            new BatchMultipleFusionStreamOperatorFactory(
                                     inputTransformAndInputSpecPairs.stream()
                                             .map(Pair::getValue)
                                             .collect(Collectors.toList())),
                             InternalTypeInfo.of(getOutputType()),
-                            generator.getParallelism());
+                            generator.getParallelism(),
+                            false);
         } else {
             multipleInputTransform =
                     new MultipleInputTransformation<>(
@@ -149,7 +150,8 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
                                     generator.getHeadWrappers(),
                                     generator.getTailWrapper()),
                             InternalTypeInfo.of(getOutputType()),
-                            generator.getParallelism());
+                            generator.getParallelism(),
+                            false);
         }
 
         multipleInputTransform.setDescription(createTransformationDescription(config));

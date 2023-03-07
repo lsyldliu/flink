@@ -160,6 +160,77 @@ public abstract class LongHybridHashTable extends BaseHybridHashTable {
         }
     }
 
+    public BinaryRowData getValue(long probeKey) throws IOException {
+        if (denseMode) {
+            if (probeKey >= minKey && probeKey <= maxKey) {
+                long denseBucket = probeKey - minKey;
+                long denseBucketOffset = denseBucket << 3;
+                int denseSegIndex = (int) (denseBucketOffset >>> segmentSizeBits);
+                int denseSegOffset = (int) (denseBucketOffset & segmentSizeMask);
+
+                long address = denseBuckets[denseSegIndex].getLong(denseSegOffset);
+                this.matchIterator = densePartition.valueIter(address);
+            } else {
+                this.matchIterator = densePartition.valueIter(INVALID_ADDRESS);
+            }
+
+            if (matchIterator.advanceNext()) {
+                return matchIterator.getRow();
+            } else {
+                return null;
+            }
+        } else {
+            final int hash = hashLong(probeKey, this.currentRecursionDepth);
+
+            LongHashPartition p = this.partitionsBeingBuilt.get(hash % partitionsBeingBuilt.size());
+
+            // for an in-memory partition, process set the return iterators, else spill the probe
+            // records
+            if (p.isInMemory()) {
+                this.matchIterator = p.get(probeKey, hash);
+                if (matchIterator.advanceNext()) {
+                    return matchIterator.getRow();
+                } else {
+                    return null;
+                }
+            } else {
+                throw new UnsupportedOperationException(
+                        "LongHashTable doesn't support spill to disk.");
+            }
+        }
+    }
+
+    public RowIterator<BinaryRowData> get(long probeKey) throws IOException {
+        if (denseMode) {
+            if (probeKey >= minKey && probeKey <= maxKey) {
+                long denseBucket = probeKey - minKey;
+                long denseBucketOffset = denseBucket << 3;
+                int denseSegIndex = (int) (denseBucketOffset >>> segmentSizeBits);
+                int denseSegOffset = (int) (denseBucketOffset & segmentSizeMask);
+
+                long address = denseBuckets[denseSegIndex].getLong(denseSegOffset);
+                this.matchIterator = densePartition.valueIter(address);
+            } else {
+                this.matchIterator = densePartition.valueIter(INVALID_ADDRESS);
+            }
+
+            return matchIterator;
+        } else {
+            final int hash = hashLong(probeKey, this.currentRecursionDepth);
+
+            LongHashPartition p = this.partitionsBeingBuilt.get(hash % partitionsBeingBuilt.size());
+            // for an in-memory partition, process set the return iterators, else spill the probe
+            // records
+            if (p.isInMemory()) {
+                this.matchIterator = p.get(probeKey, hash);
+                return matchIterator;
+            } else {
+                throw new UnsupportedOperationException(
+                        "LongHashTable doesn't support spill to disk.");
+            }
+        }
+    }
+
     public boolean nextMatching() throws IOException {
         return !denseMode && (processProbeIter() || prepareNextPartition());
     }

@@ -22,6 +22,7 @@ import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.metrics.groups.OperatorMetricGroup;
 import org.apache.flink.streaming.api.operators.StreamOperatorParameters;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
+import org.apache.flink.table.api.config.ExecutionConfigOptions;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.runtime.typeutils.BinaryRowDataSerializer;
 import org.apache.flink.table.runtime.typeutils.StringDataSerializer;
@@ -181,8 +182,12 @@ public final class ShipModeHashJoinOperator {
         public LongHashTable$167(
                 StreamOperatorParameters<RowData> parameters, long memorySize, long parallelTasks) {
             super(
-                    parameters.getContainingTask().getJobConfiguration(),
                     parameters.getContainingTask(),
+                    ExecutionConfigOptions.TABLE_EXEC_SPILL_COMPRESSION_ENABLED.defaultValue(),
+                    (int)
+                            ExecutionConfigOptions.TABLE_EXEC_SPILL_COMPRESSION_BLOCK_SIZE
+                                    .defaultValue()
+                                    .getBytes(),
                     buildSer$168,
                     probeSer$169,
                     parameters.getContainingTask().getEnvironment().getMemoryManager(),
