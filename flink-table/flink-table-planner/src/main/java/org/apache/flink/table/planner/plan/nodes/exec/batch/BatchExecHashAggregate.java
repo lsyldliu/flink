@@ -159,4 +159,8 @@ public class BatchExecHashAggregate extends ExecNodeBase<RowData>
                 managedMemory,
                 false);
     }
+
+    public boolean isFinal() {
+        return isFinal;
+    }
 }

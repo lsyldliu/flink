@@ -39,11 +39,11 @@ public class BatchMultipleFusionStreamOperatorFactory
     @Override
     public <T extends StreamOperator<RowData>> T createStreamOperator(
             StreamOperatorParameters<RowData> parameters) {
-        return (T) new BatchMultipleFusionStreamOperator(parameters, inputSpecs);
+        return (T) new BatchMultipleFusionSplitStreamOperator(parameters, inputSpecs);
     }
 
     @Override
     public Class<? extends StreamOperator> getStreamOperatorClass(ClassLoader classLoader) {
-        return BatchMultipleFusionStreamOperator.class;
+        return BatchMultipleFusionSplitStreamOperator.class;
     }
 }

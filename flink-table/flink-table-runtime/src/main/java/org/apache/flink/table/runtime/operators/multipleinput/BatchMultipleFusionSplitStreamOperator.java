@@ -29,7 +29,6 @@ import org.apache.flink.streaming.api.operators.InputSelection;
 import org.apache.flink.streaming.api.operators.MultipleInputStreamOperator;
 import org.apache.flink.streaming.api.operators.StreamOperatorParameters;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
-import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.binary.BinaryRowData;
 import org.apache.flink.table.data.binary.BinaryStringData;
@@ -37,14 +36,159 @@ import org.apache.flink.table.runtime.operators.multipleinput.input.InputSelecti
 import org.apache.flink.table.runtime.operators.multipleinput.input.InputSpec;
 import org.apache.flink.table.runtime.typeutils.BinaryRowDataSerializer;
 import org.apache.flink.table.runtime.util.RowIterator;
+import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LogicalType;
 
 import java.util.Arrays;
 import java.util.List;
 
-/** A {@link MultipleInputStreamOperatorBase} to handle batch operators. */
-public final class BatchMultipleFusionStreamOperator extends AbstractStreamOperatorV2<RowData>
+import static org.apache.flink.table.types.logical.VarCharType.STRING_TYPE;
+
+/** A code split {@link MultipleInputStreamOperatorBase} to handle batch operators. */
+public final class BatchMultipleFusionSplitStreamOperator extends AbstractStreamOperatorV2<RowData>
         implements MultipleInputStreamOperator<RowData>, BoundedMultiInput, InputSelectable {
+
+    boolean localHashAggHasReturned$36;
+    org.apache.flink.table.data.binary.BinaryStringData field$240;
+    boolean isNull$240;
+    org.apache.flink.table.data.binary.BinaryStringData field$242;
+    boolean isNull$243;
+    org.apache.flink.table.data.binary.BinaryStringData result$244;
+    org.apache.flink.table.data.binary.BinaryStringData field$245;
+    boolean isNull$245;
+    org.apache.flink.table.data.binary.BinaryStringData field$246;
+    org.apache.flink.table.data.binary.BinaryStringData field$247;
+    boolean isNull$247;
+    org.apache.flink.table.data.binary.BinaryStringData field$248;
+    long field$249;
+    boolean isNull$249;
+    long field$250;
+    boolean isNull$250;
+    boolean isNull$251;
+    long result$252;
+    boolean isNull$253;
+    boolean result$254;
+    boolean isNull$256;
+    long result$257;
+    boolean isNull$258;
+    boolean result$259;
+    boolean isNull$260;
+    long result$261;
+    boolean isNull$262;
+    boolean result$263;
+    boolean isNull$266;
+    long result$267;
+    boolean isNull$268;
+    boolean result$269;
+    boolean isNull$270;
+    long result$271;
+    boolean isNull$272;
+    boolean result$273;
+    boolean isNull$276;
+    long result$277;
+    boolean isNull$278;
+    boolean result$279;
+    boolean isNull$280;
+    long result$281;
+    boolean isNull$282;
+    boolean result$283;
+    boolean isNull$286;
+    long result$287;
+    boolean isNull$288;
+    boolean result$289;
+    int result$255;
+    boolean isNull$255;
+    boolean result$264;
+    boolean isNull$264;
+    int result$265;
+    boolean isNull$265;
+    boolean result$274;
+    boolean isNull$274;
+    int result$275;
+    boolean isNull$275;
+    boolean result$284;
+    boolean isNull$284;
+    int result$285;
+    boolean isNull$285;
+    int result$290;
+    boolean isNull$290;
+
+    org.apache.flink.table.data.binary.BinaryStringData field$297;
+    boolean isNull$297;
+    org.apache.flink.table.data.binary.BinaryStringData field$298;
+    boolean isNull$298;
+    org.apache.flink.table.data.binary.BinaryStringData field$299;
+    boolean isNull$299;
+    int field$300;
+    boolean isNull$300;
+    int field$301;
+    boolean isNull$301;
+    int field$302;
+    boolean isNull$302;
+    int field$303;
+    boolean isNull$303;
+    int field$304;
+    boolean isNull$304;
+    org.apache.flink.table.runtime.util.collections.binary.BytesMap.LookupInfo lookupInfo$308;
+    org.apache.flink.table.data.binary.BinaryRowData currentAggBuffer$312;
+    int field$315;
+    boolean isNull$315;
+    int field$316;
+    boolean isNull$316;
+    boolean isNull$317;
+    int result$318;
+    int field$321;
+    boolean isNull$321;
+    int field$322;
+    boolean isNull$322;
+    boolean isNull$323;
+    int result$324;
+    int field$327;
+    boolean isNull$327;
+    int field$328;
+    boolean isNull$328;
+    boolean isNull$329;
+    int result$330;
+    int field$333;
+    boolean isNull$333;
+    int field$334;
+    boolean isNull$334;
+    boolean isNull$335;
+    int result$336;
+    int field$339;
+    boolean isNull$339;
+    int field$340;
+    boolean isNull$340;
+    boolean isNull$341;
+    int result$342;
+    org.apache.flink.table.runtime.util.KeyValueIterator<
+                    org.apache.flink.table.data.binary.BinaryRowData,
+                    org.apache.flink.table.data.binary.BinaryRowData>
+            iterator$345;
+    int result$320;
+    boolean isNull$320;
+    int result$319;
+    boolean isNull$319;
+    int result$326;
+    boolean isNull$326;
+    int result$325;
+    boolean isNull$325;
+    int result$332;
+    boolean isNull$332;
+    int result$331;
+    boolean isNull$331;
+    int result$338;
+    boolean isNull$338;
+    int result$337;
+    boolean isNull$337;
+    int result$344;
+    boolean isNull$344;
+    int result$343;
+    boolean isNull$343;
+    org.apache.flink.table.runtime.util.KeyValueIterator<
+                    org.apache.flink.table.data.binary.BinaryRowData,
+                    org.apache.flink.table.data.binary.BinaryRowData>
+            local$34;
 
     private static final long serialVersionUID = 1L;
 
@@ -109,7 +253,7 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
     private final org.apache.flink.streaming.runtime.streamrecord.StreamRecord outElement =
             new org.apache.flink.streaming.runtime.streamrecord.StreamRecord(null);
 
-    public BatchMultipleFusionStreamOperator(
+    public BatchMultipleFusionSplitStreamOperator(
             StreamOperatorParameters<RowData> parameters, List<InputSpec> inputSpecs) {
         super(parameters, inputSpecs.size());
         this.parameters = parameters;
@@ -155,17 +299,11 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
                 "Open all join operator in multiple node successfully, operator memory size is {}.",
                 memorySize);
 
-        groupKeyTypes$305 =
-                Arrays.asList(DataTypes.STRING(), DataTypes.STRING(), DataTypes.STRING())
-                        .toArray(new LogicalType[0]);
+        groupKeyTypes$305 = new LogicalType[] {STRING_TYPE, STRING_TYPE, STRING_TYPE};
         aggBufferTypes$306 =
-                Arrays.asList(
-                                DataTypes.INT(),
-                                DataTypes.INT(),
-                                DataTypes.INT(),
-                                DataTypes.INT(),
-                                DataTypes.INT())
-                        .toArray(new LogicalType[0]);
+                new LogicalType[] {
+                    new IntType(), new IntType(), new IntType(), new IntType(), new IntType()
+                };
         aggregateMap$307 =
                 new org.apache.flink.table.runtime.util.collections.binary.BytesHashMap(
                         parameters.getContainingTask(),
@@ -482,71 +620,70 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
             boolean isNullWarehouseName,
             BinaryStringData warehouseName)
             throws Exception {
-        org.apache.flink.table.data.binary.BinaryStringData field$240;
-        boolean isNull$240;
-        org.apache.flink.table.data.binary.BinaryStringData field$242;
-        boolean isNull$243;
-        org.apache.flink.table.data.binary.BinaryStringData result$244;
-        org.apache.flink.table.data.binary.BinaryStringData field$245;
-        boolean isNull$245;
-        org.apache.flink.table.data.binary.BinaryStringData field$246;
-        org.apache.flink.table.data.binary.BinaryStringData field$247;
-        boolean isNull$247;
-        org.apache.flink.table.data.binary.BinaryStringData field$248;
-        long field$249;
-        boolean isNull$249;
-        long field$250;
-        boolean isNull$250;
-        boolean isNull$251;
-        long result$252;
-        boolean isNull$253;
-        boolean result$254;
-        boolean isNull$256;
-        long result$257;
-        boolean isNull$258;
-        boolean result$259;
-        boolean isNull$260;
-        long result$261;
-        boolean isNull$262;
-        boolean result$263;
-        boolean isNull$266;
-        long result$267;
-        boolean isNull$268;
-        boolean result$269;
-        boolean isNull$270;
-        long result$271;
-        boolean isNull$272;
-        boolean result$273;
-        boolean isNull$276;
-        long result$277;
-        boolean isNull$278;
-        boolean result$279;
-        boolean isNull$280;
-        long result$281;
-        boolean isNull$282;
-        boolean result$283;
-        boolean isNull$286;
-        long result$287;
-        boolean isNull$288;
-        boolean result$289;
+
+        processCaseWhenExpr_split37(
+                isNullShipDateSk,
+                shipDateSk,
+                isNullSoldDateSk,
+                soldDateSk,
+                isNullCcName,
+                ccName,
+                isNullSmType,
+                smType,
+                isNullWarehouseName,
+                warehouseName);
+
+        processCaseWhenExpr_split38(
+                isNullShipDateSk,
+                shipDateSk,
+                isNullSoldDateSk,
+                soldDateSk,
+                isNullCcName,
+                ccName,
+                isNullSmType,
+                smType,
+                isNullWarehouseName,
+                warehouseName);
+
+        processCaseWhenExpr_split39(
+                isNullShipDateSk,
+                shipDateSk,
+                isNullSoldDateSk,
+                soldDateSk,
+                isNullCcName,
+                ccName,
+                isNullSmType,
+                smType,
+                isNullWarehouseName,
+                warehouseName);
+    }
+
+    void processCaseWhenExpr_split37(
+            boolean isNullShipDateSk,
+            long shipDateSk,
+            boolean isNullSoldDateSk,
+            long soldDateSk,
+            boolean isNullCcName,
+            BinaryStringData ccName,
+            boolean isNullSmType,
+            BinaryStringData smType,
+            boolean isNullWarehouseName,
+            BinaryStringData warehouseName)
+            throws Exception {
 
         isNull$249 = isNullShipDateSk;
         field$249 = shipDateSk;
         isNull$250 = isNullSoldDateSk;
         field$250 = soldDateSk;
-
         isNull$240 = isNullWarehouseName;
         field$240 = warehouseName;
         field$242 = field$240;
-
         isNull$245 = isNullSmType;
         field$245 = smType;
         field$246 = field$245;
-
         isNull$247 = isNullCcName;
         field$247 = ccName;
         field$248 = field$247;
-
         isNull$243 = isNull$240 || false || false;
         result$244 = org.apache.flink.table.data.binary.BinaryStringData.EMPTY_UTF8;
         if (!isNull$243) {
@@ -556,25 +693,19 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
 
             isNull$243 = (result$244 == null);
         }
-
-        // isNull$255 result$255
         isNull$251 = isNull$249 || isNull$250;
         result$252 = -1L;
         if (!isNull$251) {
 
             result$252 = (long) (field$249 - field$250);
         }
-
         isNull$253 = isNull$251 || false;
         result$254 = false;
         if (!isNull$253) {
 
             result$254 = result$252 <= ((int) 30);
         }
-
-        // first sum
-        int result$255 = -1;
-        boolean isNull$255;
+        result$255 = -1;
         if (result$254) {
 
             // --- Cast section generated by
@@ -598,23 +729,20 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
                 result$255 = ((int) 0);
             }
         }
-
         isNull$256 = isNull$249 || isNull$250;
         result$257 = -1L;
         if (!isNull$256) {
 
             result$257 = (long) (field$249 - field$250);
         }
-
         isNull$258 = isNull$256 || false;
         result$259 = false;
         if (!isNull$258) {
 
             result$259 = result$257 > ((int) 30);
         }
-
-        boolean result$264 = false;
-        boolean isNull$264 = false;
+        result$264 = false;
+        isNull$264 = false;
         if (!isNull$258 && !result$259) {
             // left expr is false, skip right expr
         } else {
@@ -653,11 +781,7 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
                 isNull$264 = true;
             }
         }
-
-        // isNull$265 result$265
-        // second sum
-        int result$265 = -1;
-        boolean isNull$265;
+        result$265 = -1;
         if (result$264) {
 
             // --- Cast section generated by
@@ -681,23 +805,34 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
                 result$265 = ((int) 0);
             }
         }
-
         isNull$266 = isNull$249 || isNull$250;
         result$267 = -1L;
         if (!isNull$266) {
 
             result$267 = (long) (field$249 - field$250);
         }
+    }
 
+    void processCaseWhenExpr_split38(
+            boolean isNullShipDateSk,
+            long shipDateSk,
+            boolean isNullSoldDateSk,
+            long soldDateSk,
+            boolean isNullCcName,
+            BinaryStringData ccName,
+            boolean isNullSmType,
+            BinaryStringData smType,
+            boolean isNullWarehouseName,
+            BinaryStringData warehouseName)
+            throws Exception {
         isNull$268 = isNull$266 || false;
         result$269 = false;
         if (!isNull$268) {
 
             result$269 = result$267 > ((int) 60);
         }
-
-        boolean result$274 = false;
-        boolean isNull$274 = false;
+        result$274 = false;
+        isNull$274 = false;
         if (!isNull$268 && !result$269) {
             // left expr is false, skip right expr
         } else {
@@ -736,10 +871,7 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
                 isNull$274 = true;
             }
         }
-        // isNull$275 result$275
-        // third sum
-        int result$275 = -1;
-        boolean isNull$275;
+        result$275 = -1;
         if (result$274) {
 
             // --- Cast section generated by
@@ -763,23 +895,20 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
                 result$275 = ((int) 0);
             }
         }
-
         isNull$276 = isNull$249 || isNull$250;
         result$277 = -1L;
         if (!isNull$276) {
 
             result$277 = (long) (field$249 - field$250);
         }
-
         isNull$278 = isNull$276 || false;
         result$279 = false;
         if (!isNull$278) {
 
             result$279 = result$277 > ((int) 90);
         }
-
-        boolean result$284 = false;
-        boolean isNull$284 = false;
+        result$284 = false;
+        isNull$284 = false;
         if (!isNull$278 && !result$279) {
             // left expr is false, skip right expr
         } else {
@@ -817,10 +946,21 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
                 isNull$284 = true;
             }
         }
-        // fourth sum
-        // isNull$285 result$285
-        int result$285 = -1;
-        boolean isNull$285;
+        result$285 = -1;
+    }
+
+    void processCaseWhenExpr_split39(
+            boolean isNullShipDateSk,
+            long shipDateSk,
+            boolean isNullSoldDateSk,
+            long soldDateSk,
+            boolean isNullCcName,
+            BinaryStringData ccName,
+            boolean isNullSmType,
+            BinaryStringData smType,
+            boolean isNullWarehouseName,
+            BinaryStringData warehouseName)
+            throws Exception {
         if (result$284) {
 
             // --- Cast section generated by
@@ -844,24 +984,19 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
                 result$285 = ((int) 0);
             }
         }
-
         isNull$286 = isNull$249 || isNull$250;
         result$287 = -1L;
         if (!isNull$286) {
 
             result$287 = (long) (field$249 - field$250);
         }
-
         isNull$288 = isNull$286 || false;
         result$289 = false;
         if (!isNull$288) {
 
             result$289 = result$287 > ((int) 120);
         }
-        // five sum
-        // isNull$290 result$290
-        int result$290 = -1;
-        boolean isNull$290;
+        result$290 = -1;
         if (result$289) {
 
             // --- Cast section generated by
@@ -885,15 +1020,6 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
                 result$290 = ((int) 0);
             }
         }
-
-        // isNull$243 result$244
-        // isNull$245 field$246
-        // isNull$247 field$248
-        // sum1: isNull$255 result$255
-        // sum2: isNull$265 result$265
-        // sum3: isNull$275 result$275
-        // sum4: isNull$285 result$285
-        // sum5: isNull$290 result$290
         localHashAgg(
                 isNull$243,
                 result$244,
@@ -931,56 +1057,143 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
             boolean isNullSumResult5,
             int sumResult5)
             throws Exception {
-        org.apache.flink.table.data.binary.BinaryStringData field$297;
-        boolean isNull$297;
-        org.apache.flink.table.data.binary.BinaryStringData field$298;
-        boolean isNull$298;
-        org.apache.flink.table.data.binary.BinaryStringData field$299;
-        boolean isNull$299;
-        int field$300;
-        boolean isNull$300;
-        int field$301;
-        boolean isNull$301;
-        int field$302;
-        boolean isNull$302;
-        int field$303;
-        boolean isNull$303;
-        int field$304;
-        boolean isNull$304;
-        org.apache.flink.table.runtime.util.collections.binary.BytesMap.LookupInfo lookupInfo$308;
-        org.apache.flink.table.data.binary.BinaryRowData currentAggBuffer$312;
-        int field$315;
-        boolean isNull$315;
-        int field$316;
-        boolean isNull$316;
-        boolean isNull$317;
-        int result$318;
-        int field$321;
-        boolean isNull$321;
-        int field$322;
-        boolean isNull$322;
-        boolean isNull$323;
-        int result$324;
-        int field$327;
-        boolean isNull$327;
-        int field$328;
-        boolean isNull$328;
-        boolean isNull$329;
-        int result$330;
-        int field$333;
-        boolean isNull$333;
-        int field$334;
-        boolean isNull$334;
-        boolean isNull$335;
-        int result$336;
-        int field$339;
-        boolean isNull$339;
-        int field$340;
-        boolean isNull$340;
-        boolean isNull$341;
-        int result$342;
+        localHashAggHasReturned$36 = false;
 
         // input field access for group key projection and aggregate buffer update
+        localHashAgg_split40(
+                isNullWarehouseName,
+                warehouseName,
+                isNullSmType,
+                smType,
+                isNullCcName,
+                ccName,
+                isNullSumResult1,
+                sumResult1,
+                isNullSumResult2,
+                sumResult2,
+                isNullSumResult3,
+                sumResult3,
+                isNullSumResult4,
+                sumResult4,
+                isNullSumResult5,
+                sumResult5);
+
+        localHashAgg_split41(
+                isNullWarehouseName,
+                warehouseName,
+                isNullSmType,
+                smType,
+                isNullCcName,
+                ccName,
+                isNullSumResult1,
+                sumResult1,
+                isNullSumResult2,
+                sumResult2,
+                isNullSumResult3,
+                sumResult3,
+                isNullSumResult4,
+                sumResult4,
+                isNullSumResult5,
+                sumResult5);
+        if (localHashAggHasReturned$36) {
+            return;
+        }
+
+        localHashAgg_split42(
+                isNullWarehouseName,
+                warehouseName,
+                isNullSmType,
+                smType,
+                isNullCcName,
+                ccName,
+                isNullSumResult1,
+                sumResult1,
+                isNullSumResult2,
+                sumResult2,
+                isNullSumResult3,
+                sumResult3,
+                isNullSumResult4,
+                sumResult4,
+                isNullSumResult5,
+                sumResult5);
+
+        localHashAgg_split43(
+                isNullWarehouseName,
+                warehouseName,
+                isNullSmType,
+                smType,
+                isNullCcName,
+                ccName,
+                isNullSumResult1,
+                sumResult1,
+                isNullSumResult2,
+                sumResult2,
+                isNullSumResult3,
+                sumResult3,
+                isNullSumResult4,
+                sumResult4,
+                isNullSumResult5,
+                sumResult5);
+
+        localHashAgg_split44(
+                isNullWarehouseName,
+                warehouseName,
+                isNullSmType,
+                smType,
+                isNullCcName,
+                ccName,
+                isNullSumResult1,
+                sumResult1,
+                isNullSumResult2,
+                sumResult2,
+                isNullSumResult3,
+                sumResult3,
+                isNullSumResult4,
+                sumResult4,
+                isNullSumResult5,
+                sumResult5);
+
+        localHashAgg_split45(
+                isNullWarehouseName,
+                warehouseName,
+                isNullSmType,
+                smType,
+                isNullCcName,
+                ccName,
+                isNullSumResult1,
+                sumResult1,
+                isNullSumResult2,
+                sumResult2,
+                isNullSumResult3,
+                sumResult3,
+                isNullSumResult4,
+                sumResult4,
+                isNullSumResult5,
+                sumResult5);
+        if (localHashAggHasReturned$36) {
+            return;
+        }
+    }
+
+    void localHashAgg_split40(
+            boolean isNullWarehouseName,
+            BinaryStringData warehouseName,
+            boolean isNullSmType,
+            BinaryStringData smType,
+            boolean isNullCcName,
+            BinaryStringData ccName,
+            boolean isNullSumResult1,
+            int sumResult1,
+            boolean isNullSumResult2,
+            int sumResult2,
+            boolean isNullSumResult3,
+            int sumResult3,
+            boolean isNullSumResult4,
+            int sumResult4,
+            boolean isNullSumResult5,
+            int sumResult5)
+            throws Exception {
+
         isNull$333 = isNullSumResult4;
         field$333 = -1;
         if (!isNull$333) {
@@ -1006,10 +1219,7 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
         if (!isNull$315) {
             field$315 = sumResult1;
         }
-        // project key from input
-
         currentKeyWriter$294.reset();
-
         isNull$297 = isNullWarehouseName;
         field$297 = warehouseName;
         if (isNull$297) {
@@ -1017,7 +1227,6 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
         } else {
             currentKeyWriter$294.writeString(0, field$297);
         }
-
         isNull$298 = isNullSmType;
         field$298 = smType;
         if (isNull$298) {
@@ -1025,7 +1234,6 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
         } else {
             currentKeyWriter$294.writeString(1, field$298);
         }
-
         isNull$299 = isNullCcName;
         field$299 = ccName;
         if (isNull$299) {
@@ -1033,9 +1241,27 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
         } else {
             currentKeyWriter$294.writeString(2, field$299);
         }
-
         currentKeyWriter$294.complete();
+    }
 
+    void localHashAgg_split41(
+            boolean isNullWarehouseName,
+            BinaryStringData warehouseName,
+            boolean isNullSmType,
+            BinaryStringData smType,
+            boolean isNullCcName,
+            BinaryStringData ccName,
+            boolean isNullSumResult1,
+            int sumResult1,
+            boolean isNullSumResult2,
+            int sumResult2,
+            boolean isNullSumResult3,
+            int sumResult3,
+            boolean isNullSumResult4,
+            int sumResult4,
+            boolean isNullSumResult5,
+            int sumResult5)
+            throws Exception {
         if (localAggSuppressed$347) {
 
             currentValueWriter$296.reset();
@@ -1130,16 +1356,36 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
 
             output.collect(outElement.replace(hashAggOutput$309));
 
-            return;
+            {
+                localHashAggHasReturned$36 = true;
+                return;
+            }
         }
-
-        // look up output buffer using current group key
         lookupInfo$308 =
                 (org.apache.flink.table.runtime.util.collections.binary.BytesMap.LookupInfo)
                         aggregateMap$307.lookup(currentKey$293);
         currentAggBuffer$312 =
                 (org.apache.flink.table.data.binary.BinaryRowData) lookupInfo$308.getValue();
+    }
 
+    void localHashAgg_split42(
+            boolean isNullWarehouseName,
+            BinaryStringData warehouseName,
+            boolean isNullSmType,
+            BinaryStringData smType,
+            boolean isNullCcName,
+            BinaryStringData ccName,
+            boolean isNullSumResult1,
+            int sumResult1,
+            boolean isNullSumResult2,
+            int sumResult2,
+            boolean isNullSumResult3,
+            int sumResult3,
+            boolean isNullSumResult4,
+            int sumResult4,
+            boolean isNullSumResult5,
+            int sumResult5)
+            throws Exception {
         if (!lookupInfo$308.isFound()) {
             distinctCount$348++;
 
@@ -1153,12 +1399,9 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
                         aggregateMap$307.getNumElements());
                 // hash map out of memory, output directly
 
-                org.apache.flink.table.runtime.util.KeyValueIterator<
-                                org.apache.flink.table.data.binary.BinaryRowData,
-                                org.apache.flink.table.data.binary.BinaryRowData>
-                        iterator$345 =
-                                aggregateMap$307.getEntryIterator(
-                                        false); // reuse key/value during iterating
+                iterator$345 =
+                        aggregateMap$307.getEntryIterator(
+                                false); // reuse key/value during iterating
                 while (iterator$345.advanceNext()) {
                     // set result and output
                     reuseAggMapKey$310 =
@@ -1186,9 +1429,7 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
                 }
             }
         }
-
         totalCount$349++;
-
         if (totalCount$349 == 500000) {
             LOG.info(
                     "Local hash aggregation checkpoint reached, sampling threshold = "
@@ -1204,8 +1445,6 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
                 localAggSuppressed$347 = true;
             }
         }
-
-        // aggregate buffer fields access
         isNull$316 = currentAggBuffer$312.isNullAt(0);
         field$316 = -1;
         if (!isNull$316) {
@@ -1231,9 +1470,27 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
         if (!isNull$328) {
             field$328 = currentAggBuffer$312.getInt(2);
         }
-        // do aggregate and update agg buffer
-        int result$320 = -1;
-        boolean isNull$320;
+        result$320 = -1;
+    }
+
+    void localHashAgg_split43(
+            boolean isNullWarehouseName,
+            BinaryStringData warehouseName,
+            boolean isNullSmType,
+            BinaryStringData smType,
+            boolean isNullCcName,
+            BinaryStringData ccName,
+            boolean isNullSumResult1,
+            int sumResult1,
+            boolean isNullSumResult2,
+            int sumResult2,
+            boolean isNullSumResult3,
+            int sumResult3,
+            boolean isNullSumResult4,
+            int sumResult4,
+            boolean isNullSumResult5,
+            int sumResult5)
+            throws Exception {
         if (false) {
 
             // --- Cast section generated by
@@ -1246,8 +1503,8 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
                 result$320 = field$316;
             }
         } else {
-            int result$319 = -1;
-            boolean isNull$319;
+            result$319 = -1;
+
             if (isNull$316) {
 
                 // --- Cast section generated by
@@ -1293,8 +1550,7 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
         } else {
             currentAggBuffer$312.setInt(0, result$320);
         }
-        int result$326 = -1;
-        boolean isNull$326;
+        result$326 = -1;
         if (false) {
 
             // --- Cast section generated by
@@ -1307,8 +1563,8 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
                 result$326 = field$322;
             }
         } else {
-            int result$325 = -1;
-            boolean isNull$325;
+            result$325 = -1;
+
             if (isNull$322) {
 
                 // --- Cast section generated by
@@ -1354,8 +1610,27 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
         } else {
             currentAggBuffer$312.setInt(1, result$326);
         }
-        int result$332 = -1;
-        boolean isNull$332;
+        result$332 = -1;
+    }
+
+    void localHashAgg_split44(
+            boolean isNullWarehouseName,
+            BinaryStringData warehouseName,
+            boolean isNullSmType,
+            BinaryStringData smType,
+            boolean isNullCcName,
+            BinaryStringData ccName,
+            boolean isNullSumResult1,
+            int sumResult1,
+            boolean isNullSumResult2,
+            int sumResult2,
+            boolean isNullSumResult3,
+            int sumResult3,
+            boolean isNullSumResult4,
+            int sumResult4,
+            boolean isNullSumResult5,
+            int sumResult5)
+            throws Exception {
         if (false) {
 
             // --- Cast section generated by
@@ -1368,8 +1643,8 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
                 result$332 = field$328;
             }
         } else {
-            int result$331 = -1;
-            boolean isNull$331;
+            result$331 = -1;
+
             if (isNull$328) {
 
                 // --- Cast section generated by
@@ -1415,8 +1690,7 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
         } else {
             currentAggBuffer$312.setInt(2, result$332);
         }
-        int result$338 = -1;
-        boolean isNull$338;
+        result$338 = -1;
         if (false) {
 
             // --- Cast section generated by
@@ -1429,8 +1703,8 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
                 result$338 = field$334;
             }
         } else {
-            int result$337 = -1;
-            boolean isNull$337;
+            result$337 = -1;
+
             if (isNull$334) {
 
                 // --- Cast section generated by
@@ -1476,8 +1750,27 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
         } else {
             currentAggBuffer$312.setInt(3, result$338);
         }
-        int result$344 = -1;
-        boolean isNull$344;
+        result$344 = -1;
+    }
+
+    void localHashAgg_split45(
+            boolean isNullWarehouseName,
+            BinaryStringData warehouseName,
+            boolean isNullSmType,
+            BinaryStringData smType,
+            boolean isNullCcName,
+            BinaryStringData ccName,
+            boolean isNullSumResult1,
+            int sumResult1,
+            boolean isNullSumResult2,
+            int sumResult2,
+            boolean isNullSumResult3,
+            int sumResult3,
+            boolean isNullSumResult4,
+            int sumResult4,
+            boolean isNullSumResult5,
+            int sumResult5)
+            throws Exception {
         if (false) {
 
             // --- Cast section generated by
@@ -1490,8 +1783,8 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
                 result$344 = field$340;
             }
         } else {
-            int result$343 = -1;
-            boolean isNull$343;
+            result$343 = -1;
+
             if (isNull$340) {
 
                 // --- Cast section generated by
@@ -1537,26 +1830,23 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
         } else {
             currentAggBuffer$312.setInt(4, result$344);
         }
-
-        // flush result form map if suppress is enable.
         if (localAggSuppressed$347) {
-            org.apache.flink.table.runtime.util.KeyValueIterator<
-                            org.apache.flink.table.data.binary.BinaryRowData,
-                            org.apache.flink.table.data.binary.BinaryRowData>
-                    iterator$345 =
-                            aggregateMap$307.getEntryIterator(
-                                    false); // reuse key/value during iterating
-            while (iterator$345.advanceNext()) {
+
+            local$34 = aggregateMap$307.getEntryIterator(false); // reuse key/value during iterating
+            while (local$34.advanceNext()) {
                 // set result and output
-                reuseAggMapKey$310 = (org.apache.flink.table.data.RowData) iterator$345.getKey();
-                reuseAggBuffer$311 = (org.apache.flink.table.data.RowData) iterator$345.getValue();
+                reuseAggMapKey$310 = (org.apache.flink.table.data.RowData) local$34.getKey();
+                reuseAggBuffer$311 = (org.apache.flink.table.data.RowData) local$34.getValue();
 
                 hashAggOutput$309.replace(reuseAggMapKey$310, reuseAggBuffer$311);
 
                 output.collect(outElement.replace(hashAggOutput$309));
             }
 
-            return;
+            {
+                localHashAggHasReturned$36 = true;
+                return;
+            }
         }
     }
 

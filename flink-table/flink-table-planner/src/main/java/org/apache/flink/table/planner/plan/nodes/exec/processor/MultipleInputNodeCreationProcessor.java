@@ -28,6 +28,9 @@ import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeGraph;
 import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecBoundedStreamScan;
+import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecCalc;
+import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecHashAggregate;
+import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecHashJoin;
 import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecMultipleInput;
 import org.apache.flink.table.planner.plan.nodes.exec.common.CommonExecExchange;
 import org.apache.flink.table.planner.plan.nodes.exec.common.CommonExecTableSourceScan;
@@ -221,7 +224,18 @@ public class MultipleInputNodeCreationProcessor implements ExecNodeGraphProcesso
     private boolean canBeRootOfMultipleInputGroup(ExecNodeWrapper wrapper) {
         // only a node with more than one input can be the root,
         // as one-input operator chaining are handled by operator chains
-        return wrapper.inputs.size() >= 2;
+        boolean isOneInputEnable = false;
+        if (wrapper.inputs.size() == 1) {
+            if (wrapper.execNode instanceof BatchExecCalc) {
+                isOneInputEnable =
+                        wrapper.execNode.getInputEdges().get(0).getSource()
+                                instanceof BatchExecHashJoin;
+            } else if (wrapper.execNode instanceof BatchExecHashAggregate) {
+                BatchExecHashAggregate hashAggregate = (BatchExecHashAggregate) wrapper.execNode;
+                isOneInputEnable = !hashAggregate.isFinal();
+            }
+        }
+        return wrapper.inputs.size() >= 2 || isOneInputEnable;
     }
 
     // --------------------------------------------------------------------------------
@@ -381,7 +395,7 @@ public class MultipleInputNodeCreationProcessor implements ExecNodeGraphProcesso
             } else if (wrapper.inputs.size() == 1) {
                 // optimization 6. operators with only 1 input are not allowed to be the root,
                 // as their chaining will be handled by operator chains.
-                wrapper.group.removeRoot();
+                // wrapper.group.removeRoot();
             }
         }
     }
