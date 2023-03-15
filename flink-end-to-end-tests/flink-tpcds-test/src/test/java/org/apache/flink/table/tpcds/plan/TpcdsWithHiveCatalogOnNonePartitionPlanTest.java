@@ -25,6 +25,9 @@ import org.junit.Test;
 
 import java.util.List;
 
+import static org.apache.flink.table.api.config.OptimizerConfigOptions.TABLE_OPTIMIZER_AGG_PHASE_STRATEGY;
+import static org.apache.flink.table.api.config.OptimizerConfigOptions.TABLE_OPTIMIZER_MULTIPLE_INPUT_ENABLED;
+
 public class TpcdsWithHiveCatalogOnNonePartitionPlanTest extends TpcdsPlanTest {
     private static String scale = "10000";
     private static String multiPartition_database = "tpcds_bin_partitioned_orc_" + scale;
@@ -39,7 +42,12 @@ public class TpcdsWithHiveCatalogOnNonePartitionPlanTest extends TpcdsPlanTest {
         tEnv.registerCatalog("hive", catalog);
         tEnv.useCatalog("hive");
 
+        tEnv.getConfig().getConfiguration().set(TABLE_OPTIMIZER_MULTIPLE_INPUT_ENABLED, false);
+        // tEnv.getConfig().getConfiguration().set(TABLE_OPTIMIZER_JOIN_REORDER_ENABLED, true);
+        tEnv.getConfig().getConfiguration().set(TABLE_OPTIMIZER_AGG_PHASE_STRATEGY, "TWO_PHASE");
+
         String sql = getSqlFile(caseName);
+        // util.tableEnv().executeSql(sql);
         util.verifyExecPlan(sql);
     }
 

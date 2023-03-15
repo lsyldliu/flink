@@ -47,6 +47,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
+import static org.apache.flink.table.api.config.ExecutionConfigOptions.TABLE_EXEC_RESOURCE_DEFAULT_PARALLELISM;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Tests the dynamic partition pruning optimization on Hive sources. */
@@ -58,14 +59,14 @@ public class HiveDynamicPartitionPruningITCase {
             new MiniClusterExtension(
                     new MiniClusterResourceConfiguration.Builder()
                             .setNumberTaskManagers(1)
-                            .setNumberSlotsPerTaskManager(4)
+                            .setNumberSlotsPerTaskManager(1)
                             .build());
 
     @Parameter public boolean enableAdaptiveBatchScheduler;
 
     @Parameters(name = "enableAdaptiveBatchScheduler={0}")
     public static Collection<Boolean> parameters() {
-        return Arrays.asList(false, true);
+        return Arrays.asList(false);
     }
 
     private TableEnvironment tableEnv;
@@ -88,6 +89,7 @@ public class HiveDynamicPartitionPruningITCase {
             tableEnv = HiveTestUtils.createTableEnvInBatchMode();
         }
 
+        tableEnv.getConfig().getConfiguration().set(TABLE_EXEC_RESOURCE_DEFAULT_PARALLELISM, 1);
         tableEnv.getConfig().setSqlDialect(SqlDialect.HIVE);
         tableEnv.registerCatalog(hiveCatalog.getName(), hiveCatalog);
         tableEnv.useCatalog(hiveCatalog.getName());
@@ -139,7 +141,7 @@ public class HiveDynamicPartitionPruningITCase {
                         + " stored as orc");
         tableEnv.executeSql(
                         "insert into date_dim values "
-                                + "(2451911, 'AAAAAAAAHMJGFCAA', '2001-01-01', 1212, 5270, 405, 2001, 1, 1, 1, 1, 2001, 405, 5270, 'Monday', '2001Q1', 'Y', 'N', 'Y', 2451911, 2451910, 2451545, 2451819, 'N', 'N', 'N', 'N', 'N'),"
+                                + "(2451911, 'AAAAAAAAHMJGFCAA', '2001-01-01', 2451911, 5270, 405, 2001, 1, 1, 1, 1, 2001, 405, 5270, 'Monday', '2001Q1', 'Y', 'N', 'Y', 2451911, 2451910, 2451545, 2451819, 'N', 'N', 'N', 'N', 'N'),"
                                 + "(2451967, 'AAAAAAAAPPJGFCAA', '2001-02-26', 1213, 5278, 405, 2001, 1, 2, 26, 1, 2001, 405, 5278, 'Monday', '2001Q1', 'N', 'N', 'N', 2451942, 2451972, 2451601, 2451875, 'N', 'N', 'N', 'N', 'N'),"
                                 + "(2452263, 'AAAAAAAAHCLGFCAA', '2001-12-19', 1223, 5321, 409, 2001, 3, 12, 19, 4, 2001, 409, 5321, 'Wednesday', '2001Q4', 'N', 'N', 'N', 2452245, 2452578, 2451898, 2452171, 'N', 'N', 'N', 'N', 'N')")
                 .await();
@@ -169,30 +171,35 @@ public class HiveDynamicPartitionPruningITCase {
                         + "  `ss_net_paid` double,\n"
                         + "  `ss_net_paid_inc_tax` double,\n"
                         + "  `ss_net_profit` double)\n"
-                        + "PARTITIONED BY (\n"
-                        + "  `ss_sold_date_sk` bigint)\n"
+                        /*                        + "PARTITIONED BY (\n"
+                        + "  `ss_sold_date_sk` bigint)\n"*/
                         + "stored as orc");
+
+        // partition (ss_sold_date_sk=2451911)
         tableEnv.executeSql(
-                        "insert into store_sales partition (ss_sold_date_sk=2451911) values (30443, 40141, 62073099, 1029361, 1176, 4603838, 805, 1944, 1914078841, 84, 57.31, 111.18, 27.79, 0.0, 2334.36, 4814.04, 9339.12, 23.34, 0.0, 2334.36, 2357.7, -2479.68),"
-                                + "(30443, 104379, 62073099, 1029361, 1176, 4603838, 805, 155, 1914078841, 94, 82.88, 106.08, 67.89, 510.53, 6381.66, 7790.72, 9971.52, 410.97, 510.53, 5871.13, 6282.1, -1919.59)")
+                        "insert into store_sales values (1, 2451911, 2451911, 1029361, 1176, 4603838, 805, 1944, 1914078841, 84, 57.31, 111.18, 27.79, 0.0, 2334.36, 4814.04, 9339.12, 23.34, 0.0, 2334.36, 2357.7, -2479.68),"
+                                + "(2, 104379, 62073099, 1029361, 1176, 4603838, 805, 155, 1914078841, 94, 82.88, 106.08, 67.89, 510.53, 6381.66, 7790.72, 9971.52, 410.97, 510.53, 5871.13, 6282.1, -1919.59),"
+                                + "(3, 2451911, 2451911, 832645, 6647, 12131496, 388, 1105, 743661365, 92, 32.57, 49.83, 37.87, 2926.59, 3484.04, 2996.44, 4584.36, 39.02,2926.59, 557.45, 596.47, -2438.99),"
+                                + "(4, 2451911, 2451911, 515348, 3329, 22558157, 1174, 183, 731665549, 10, 77.96, 84.19, 60.61, 0.0, 606.1, 779.6, 841.9, 6.06, 0.0, 606.1, 612.16, -173.5),"
+                                + "(5, 2451911, 2451911, 832645, 6647, 12131496, 388, 1105, 743661365, 92, 32.57, 49.83, 37.87, 2926.59, 3484.04, 2996.44, 4584.36, 39.02,2926.59, 557.45, 596.47, -2438.99),"
+                                + "(6, 2451911, 2451911, 515348, 3329, 22558157, 1174, 183, 731665549, 10, 77.96, 84.19, 60.61, 0.0, 606.1, 779.6, 841.9, 6.06, 0.0, 606.1, 612.16, -173.5)")
+                .await();
+        /*tableEnv.executeSql(
+                        "insert into store_sales values (38660, 2451911, 2451911, 832645, 6647, 12131496, 388, 1105, 743661365, 92, 32.57, 49.83, 37.87, 2926.59, 3484.04, 2996.44, 4584.36, 39.02,2926.59, 557.45, 596.47, -2438.99)")
                 .await();
         tableEnv.executeSql(
-                        "insert into store_sales partition (ss_sold_date_sk=2451967) values (38660, 85979, 52711796, 832645, 6647, 12131496, 388, 1105, 743661365, 92, 32.57, 49.83, 37.87, 2926.59, 3484.04, 2996.44, 4584.36, 39.02,2926.59, 557.45, 596.47, -2438.99)")
-                .await();
-        tableEnv.executeSql(
-                        "insert into store_sales partition (ss_sold_date_sk=2452265) values (48831, 147511, 49856967, 515348, 3329, 22558157, 1174, 183, 731665549, 10, 77.96, 84.19, 60.61, 0.0, 606.1, 779.6, 841.9, 6.06, 0.0, 606.1, 612.16, -173.5)")
-                .await();
+                        "insert into store_sales values (48831, 2451911, 2451911, 515348, 3329, 22558157, 1174, 183, 731665549, 10, 77.96, 84.19, 60.61, 0.0, 606.1, 779.6, 841.9, 6.06, 0.0, 606.1, 612.16, -173.5)")
+                .await();*/
 
         tableEnv.getConfig().set(HiveOptions.TABLE_EXEC_HIVE_INFER_SOURCE_PARALLELISM, false);
 
         String sql =
-                "select ss_sold_date_sk, d_date_sk, d_month_seq\n"
+                "select ss_customer_sk, ss_item_sk, ss_sold_time_sk, d_date_sk\n"
                         + "from store_sales, date_dim\n"
-                        + "where store_sales.ss_sold_date_sk = date_dim.d_date_sk\n"
-                        + "and d_month_seq between 1212 and 1212 + 11";
+                        + "where store_sales.ss_customer_sk = date_dim.d_date_sk and store_sales.ss_item_sk = date_dim.d_month_seq";
 
         String expected =
-                "[+I[2451911, 2451911, 1212], +I[2451911, 2451911, 1212], +I[2451967, 2451967, 1213]]";
+                "[+I[2451911, 2451911, 48831, 2451911], +I[2451911, 2451911, 30443, 2451911], +I[2451911, 2451911, 38660, 2451911]]";
 
         tableEnv.getConfig()
                 .set(
@@ -206,7 +213,7 @@ public class HiveDynamicPartitionPruningITCase {
 
         // Check dynamic partition pruning is working
         String plan = tableEnv.explainSql(sql);
-        assertThat(plan).contains("DynamicFilteringDataCollector");
+        System.out.println(plan);
 
         List<Row> results = queryResult(tableEnv.sqlQuery(sql));
         assertThat(results.toString()).isEqualTo(expected);

@@ -63,6 +63,12 @@ public class ColumnarRowIterator extends RecyclableIterator<RowData> {
         this.recordAndPosition.set(null, offset, recordSkipCount);
     }
 
+    public void set(final int num, final int pos, final long offset, final long recordSkipCount) {
+        this.num = num;
+        this.pos = pos;
+        this.recordAndPosition.set(null, offset, recordSkipCount);
+    }
+
     @Nullable
     @Override
     public RecordAndPosition<RowData> next() {

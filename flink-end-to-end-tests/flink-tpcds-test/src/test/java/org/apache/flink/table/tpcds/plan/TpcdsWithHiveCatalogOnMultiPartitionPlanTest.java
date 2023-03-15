@@ -34,6 +34,9 @@ import org.junit.Test;
 
 import java.util.List;
 
+import static org.apache.flink.table.api.config.OptimizerConfigOptions.TABLE_OPTIMIZER_AGG_PHASE_STRATEGY;
+import static org.apache.flink.table.api.config.OptimizerConfigOptions.TABLE_OPTIMIZER_JOIN_REORDER_ENABLED;
+
 public class TpcdsWithHiveCatalogOnMultiPartitionPlanTest extends TpcdsPlanTest {
 
     public static final int DEFAULT_PARALLELISM = 3;
@@ -87,9 +90,12 @@ public class TpcdsWithHiveCatalogOnMultiPartitionPlanTest extends TpcdsPlanTest 
         tEnv.getConfig()
                 .getConfiguration()
                 .setInteger(HiveOptions.TABLE_EXEC_HIVE_INFER_SOURCE_PARALLELISM_MAX, 1500);
+        // tEnv.getConfig().getConfiguration().set(TABLE_OPTIMIZER_MULTIPLE_INPUT_ENABLED, false);
+        tEnv.getConfig().getConfiguration().set(TABLE_OPTIMIZER_JOIN_REORDER_ENABLED, true);
+        tEnv.getConfig().getConfiguration().set(TABLE_OPTIMIZER_AGG_PHASE_STRATEGY, "TWO_PHASE");
 
         String sql = getSqlFile(caseName);
-        tEnv.explainSql(sql, ExplainDetail.JSON_EXECUTION_PLAN);
+        System.out.println(tEnv.explainSql(sql, ExplainDetail.JSON_EXECUTION_PLAN));
     }
 
     private String removeLicense(String sql) {
