@@ -37,14 +37,14 @@ import static org.apache.flink.util.Preconditions.checkState;
  * first, the inputs with same priorities will be read fairly.
  */
 public class InputSelectionHandler {
-    private final List<InputSpec> inputSpecs;
+    private final List<MultipleInputSpec> inputSpecs;
     private final int numberOfInput;
     /** All inputs ids sorted by priority. */
     private final List<List<Integer>> sortedAvailableInputs;
 
     private InputSelection inputSelection;
 
-    public InputSelectionHandler(List<InputSpec> inputSpecs) {
+    public InputSelectionHandler(List<MultipleInputSpec> inputSpecs) {
         this.inputSpecs = inputSpecs;
         this.numberOfInput = inputSpecs.size();
         this.sortedAvailableInputs = buildSortedAvailableInputs();
@@ -76,7 +76,7 @@ public class InputSelectionHandler {
 
     private List<List<Integer>> buildSortedAvailableInputs() {
         final SortedMap<Integer, List<Integer>> orderedAvailableInputIds = new TreeMap<>();
-        for (InputSpec inputSpec : inputSpecs) {
+        for (MultipleInputSpec inputSpec : inputSpecs) {
             List<Integer> inputIds =
                     orderedAvailableInputIds.computeIfAbsent(
                             inputSpec.getReadOrder(), k -> new LinkedList<>());

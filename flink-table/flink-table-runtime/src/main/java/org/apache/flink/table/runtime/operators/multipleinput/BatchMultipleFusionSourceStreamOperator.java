@@ -129,7 +129,11 @@ public final class BatchMultipleFusionSourceStreamOperator extends AbstractStrea
             StreamOperatorParameters<RowData> parameters, List<InputSpec> inputSpecs) {
         super(parameters, inputSpecs.size());
         this.parameters = parameters;
-        this.inputSelectionHandler = new InputSelectionHandler(inputSpecs);
+        this.inputSelectionHandler =
+                new InputSelectionHandler(
+                        inputSpecs.stream()
+                                .map(InputSpec::getMultipleInputSpec)
+                                .collect(Collectors.toList()));
     }
 
     @Override

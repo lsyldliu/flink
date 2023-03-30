@@ -456,7 +456,8 @@ object GenerateUtils {
       inputTerm: String,
       index: Int,
       nullableInput: Boolean,
-      deepCopy: Boolean = false): GeneratedExpression = {
+      deepCopy: Boolean = false,
+      opFusionCodegen: Boolean = false): GeneratedExpression = {
     // if input has been used before, we can reuse the code that
     // has already been generated
     val inputExpr = ctx.getReusableInputUnboxingExprs(inputTerm, index) match {
@@ -474,8 +475,13 @@ object GenerateUtils {
         ctx.addReusableInputUnboxingExprs(inputTerm, index, expr)
         expr
     }
-    // hide the generated code as it will be executed only once
-    GeneratedExpression(inputExpr.resultTerm, inputExpr.nullTerm, "", inputExpr.resultType)
+    if (opFusionCodegen) {
+      inputExpr
+    } else {
+      // hide the generated code as it will be executed only once
+      GeneratedExpression(inputExpr.resultTerm, inputExpr.nullTerm, "", inputExpr.resultType)
+    }
+
   }
 
   def generateNullableInputFieldAccess(
@@ -581,34 +587,44 @@ object GenerateUtils {
       ctx: CodeGeneratorContext,
       inputType: LogicalType,
       inputTerm: String,
-      index: Int): GeneratedExpression = inputType.getTypeRoot match {
-    // ordered by type root definition
-    case ROW | STRUCTURED_TYPE =>
-      val fieldType = getFieldTypes(inputType).get(index)
-      val resultTypeTerm = primitiveTypeTermForType(fieldType)
-      val defaultValue = primitiveDefaultValue(fieldType)
-      val readCode = rowFieldReadAccess(index.toString, inputTerm, fieldType)
-      val Seq(fieldTerm, nullTerm) =
-        ctx.addReusableLocalVariables((resultTypeTerm, "field"), ("boolean", "isNull"))
+      index: Int): GeneratedExpression = {
+    if (ctx.getReusableInputExprs(inputTerm, index) != null) {
+      return ctx.getReusableInputExprs(inputTerm, index)
+    }
 
-      val inputCode =
-        s"""
-           |$nullTerm = $inputTerm.isNullAt($index);
-           |$fieldTerm = $defaultValue;
-           |if (!$nullTerm) {
-           |  $fieldTerm = $readCode;
-           |}
+    inputType.getTypeRoot match {
+      // ordered by type root definition
+      case ROW | STRUCTURED_TYPE =>
+        val fieldType = getFieldTypes(inputType).get(index)
+        val resultTypeTerm = primitiveTypeTermForType(fieldType)
+        val defaultValue = primitiveDefaultValue(fieldType)
+        val readCode = rowFieldReadAccess(index.toString, inputTerm, fieldType)
+        val Seq(fieldTerm, nullTerm) =
+          ctx.addReusableLocalVariables((resultTypeTerm, "field"), ("boolean", "isNull"))
+
+        val inputCode =
+          s"""
+             |$nullTerm = $inputTerm.isNullAt($index);
+             |$fieldTerm = $defaultValue;
+             |if (!$nullTerm) {
+             |  $fieldTerm = $readCode;
+             |}
            """.stripMargin.trim
 
-      GeneratedExpression(fieldTerm, nullTerm, inputCode, fieldType)
+        GeneratedExpression(fieldTerm, nullTerm, inputCode, fieldType)
 
-    case DISTINCT_TYPE =>
-      generateFieldAccess(ctx, inputType.asInstanceOf[DistinctType].getSourceType, inputTerm, index)
+      case DISTINCT_TYPE =>
+        generateFieldAccess(
+          ctx,
+          inputType.asInstanceOf[DistinctType].getSourceType,
+          inputTerm,
+          index)
 
-    case _ =>
-      val fieldTypeTerm = boxedTypeTermForType(inputType)
-      val inputCode = s"($fieldTypeTerm) $inputTerm"
-      generateInputFieldUnboxing(ctx, inputType, inputCode, inputCode)
+      case _ =>
+        val fieldTypeTerm = boxedTypeTermForType(inputType)
+        val inputCode = s"($fieldTypeTerm) $inputTerm"
+        generateInputFieldUnboxing(ctx, inputType, inputCode, inputCode)
+    }
   }
 
   /** Generates code for comparing two fields. */

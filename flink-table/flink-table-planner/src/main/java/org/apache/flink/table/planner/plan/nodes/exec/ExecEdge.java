@@ -22,6 +22,7 @@ import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.streaming.api.transformations.StreamExchangeMode;
 import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.delegation.Planner;
+import org.apache.flink.table.planner.codegen.OperatorFusionCodegenSupport;
 import org.apache.flink.table.types.logical.LogicalType;
 
 import java.util.Arrays;
@@ -255,5 +256,9 @@ public class ExecEdge {
      */
     public Transformation<?> translateToPlan(Planner planner) {
         return source.translateToPlan(planner);
+    }
+
+    public OperatorFusionCodegenSupport translateToCodegenOp(Planner planner) {
+        return source.translateToCodegenOp(planner);
     }
 }

@@ -54,7 +54,10 @@ import scala.collection.JavaConversions._
  * This code generator is mainly responsible for generating codes for a given calcite [[RexNode]].
  * It can also generate type conversion codes for the result converter.
  */
-class ExprCodeGenerator(ctx: CodeGeneratorContext, nullableInput: Boolean)
+class ExprCodeGenerator(
+    ctx: CodeGeneratorContext,
+    nullableInput: Boolean,
+    opFusionCodegen: Boolean = false)
   extends RexVisitor[GeneratedExpression] {
 
   /** term of the [[ProcessFunction]]'s context, can be changed when needed */
@@ -84,6 +87,17 @@ class ExprCodeGenerator(ctx: CodeGeneratorContext, nullableInput: Boolean)
     this
   }
 
+  /** Bind the input information, should be called before generating expression. */
+  def bindInputWithExpr(
+      inputType: LogicalType,
+      inputExprs: Seq[GeneratedExpression],
+      inputTerm: String = DEFAULT_INPUT1_TERM,
+      inputFieldMapping: Option[Array[Int]] = None): ExprCodeGenerator = {
+    bindInput(inputType, inputTerm, inputFieldMapping)
+    ctx.addReusableInputExprs(inputTerm, inputExprs)
+    this
+  }
+
   /**
    * In some cases, the expression will have two inputs (e.g. join condition and udtf). We should
    * bind second input information before use.
@@ -95,6 +109,20 @@ class ExprCodeGenerator(ctx: CodeGeneratorContext, nullableInput: Boolean)
     input2Type = Some(inputType)
     input2Term = Some(inputTerm)
     input2FieldMapping = inputFieldMapping
+    this
+  }
+
+  /**
+   * In some cases, the expression will have two inputs (e.g. join condition and udtf). We should
+   * bind second input information before use.
+   */
+  def bindSecondInputWithExpr(
+      inputType: LogicalType,
+      inputExprs: Seq[GeneratedExpression],
+      inputTerm: String = DEFAULT_INPUT2_TERM,
+      inputFieldMapping: Option[Array[Int]] = None): ExprCodeGenerator = {
+    bindSecondInput(inputType, inputTerm, inputFieldMapping)
+    ctx.addReusableInputExprs(inputTerm, inputExprs)
     this
   }
 
@@ -143,6 +171,49 @@ class ExprCodeGenerator(ctx: CodeGeneratorContext, nullableInput: Boolean)
     rex.accept(this)
   }
 
+  /** Generates fields expression from input row. */
+  def generateInputExpression(): Seq[GeneratedExpression] = {
+    val input1AccessExprs = input1Mapping.map {
+      case TimeIndicatorTypeInfo.ROWTIME_STREAM_MARKER |
+          TimeIndicatorTypeInfo.ROWTIME_BATCH_MARKER =>
+        throw new TableException("Rowtime extraction expression missing. Please report a bug.")
+      case TimeIndicatorTypeInfo.PROCTIME_STREAM_MARKER =>
+        // attribute is proctime indicator.
+        // we use a null literal and generate a timestamp when we need it.
+        generateNullLiteral(new LocalZonedTimestampType(true, TimestampKind.PROCTIME, 3))
+      case TimeIndicatorTypeInfo.PROCTIME_BATCH_MARKER =>
+        // attribute is proctime field in a batch query.
+        // it is initialized with the current time.
+        generateCurrentTimestamp(ctx)
+      case idx =>
+        // get type of result field
+        generateInputAccess(
+          ctx,
+          input1Type,
+          input1Term,
+          idx,
+          nullableInput,
+          opFusionCodegen = opFusionCodegen)
+    }
+
+    val input2AccessExprs = input2Type match {
+      case Some(ti) =>
+        input2Mapping
+          .map(
+            idx =>
+              generateInputAccess(
+                ctx,
+                ti,
+                input2Term.get,
+                idx,
+                nullableInput,
+                opFusionCodegen = opFusionCodegen))
+          .toSeq
+      case None => Seq() // add nothing
+    }
+    input1AccessExprs ++ input2AccessExprs
+  }
+
   /**
    * Generates an expression that converts the first input (and second input) into the given type.
    * If two inputs are converted, the second input is appended. If objects or variables can be
@@ -187,13 +258,29 @@ class ExprCodeGenerator(ctx: CodeGeneratorContext, nullableInput: Boolean)
         generateCurrentTimestamp(ctx)
       case idx =>
         // get type of result field
-        generateInputAccess(ctx, input1Type, input1Term, idx, nullableInput, fieldCopy)
+        generateInputAccess(
+          ctx,
+          input1Type,
+          input1Term,
+          idx,
+          nullableInput,
+          fieldCopy,
+          opFusionCodegen)
     }
 
     val input2AccessExprs = input2Type match {
       case Some(ti) =>
         input2Mapping
-          .map(idx => generateInputAccess(ctx, ti, input2Term.get, idx, nullableInput, true))
+          .map(
+            idx =>
+              generateInputAccess(
+                ctx,
+                ti,
+                input2Term.get,
+                idx,
+                nullableInput,
+                true,
+                opFusionCodegen))
           .toSeq
       case None => Seq() // add nothing
     }
@@ -379,7 +466,7 @@ class ExprCodeGenerator(ctx: CodeGeneratorContext, nullableInput: Boolean)
       inputRef.getIndex - input1Arity
     }
 
-    generateInputAccess(ctx, input._1, input._2, index, nullableInput, true)
+    generateInputAccess(ctx, input._1, input._2, index, nullableInput, true, opFusionCodegen)
   }
 
   override def visitTableInputRef(rexTableInputRef: RexTableInputRef): GeneratedExpression =

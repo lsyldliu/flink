@@ -41,6 +41,7 @@ import org.apache.flink.table.types.logical.LogicalType;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /** A {@link MultipleInputStreamOperatorBase} to handle batch operators. */
 public final class BatchMultipleFusionStreamOperator extends AbstractStreamOperatorV2<RowData>
@@ -113,7 +114,11 @@ public final class BatchMultipleFusionStreamOperator extends AbstractStreamOpera
             StreamOperatorParameters<RowData> parameters, List<InputSpec> inputSpecs) {
         super(parameters, inputSpecs.size());
         this.parameters = parameters;
-        this.inputSelectionHandler = new InputSelectionHandler(inputSpecs);
+        this.inputSelectionHandler =
+                new InputSelectionHandler(
+                        inputSpecs.stream()
+                                .map(InputSpec::getMultipleInputSpec)
+                                .collect(Collectors.toList()));
     }
 
     @Override

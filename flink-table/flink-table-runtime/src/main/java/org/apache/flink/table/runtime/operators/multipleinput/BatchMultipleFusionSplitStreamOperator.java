@@ -42,6 +42,7 @@ import org.apache.flink.table.types.logical.LogicalType;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.table.types.logical.VarCharType.STRING_TYPE;
 
@@ -258,7 +259,11 @@ public final class BatchMultipleFusionSplitStreamOperator extends AbstractStream
             StreamOperatorParameters<RowData> parameters, List<InputSpec> inputSpecs) {
         super(parameters, inputSpecs.size());
         this.parameters = parameters;
-        this.inputSelectionHandler = new InputSelectionHandler(inputSpecs);
+        this.inputSelectionHandler =
+                new InputSelectionHandler(
+                        inputSpecs.stream()
+                                .map(InputSpec::getMultipleInputSpec)
+                                .collect(Collectors.toList()));
     }
 
     @Override

@@ -58,13 +58,13 @@ public abstract class CommonExecCalc extends ExecNodeBase<RowData>
     public static final String FIELD_NAME_CONDITION = "condition";
 
     @JsonProperty(FIELD_NAME_PROJECTION)
-    private final List<RexNode> projection;
+    protected final List<RexNode> projection;
 
     @JsonProperty(FIELD_NAME_CONDITION)
-    private final @Nullable RexNode condition;
+    protected final @Nullable RexNode condition;
 
     private final Class<?> operatorBaseClass;
-    private final boolean retainHeader;
+    protected final boolean retainHeader;
 
     protected CommonExecCalc(
             int id,

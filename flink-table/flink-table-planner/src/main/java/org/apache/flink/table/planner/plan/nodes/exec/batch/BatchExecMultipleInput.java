@@ -23,7 +23,11 @@ import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
 import org.apache.flink.streaming.api.transformations.MultipleInputTransformation;
+import org.apache.flink.table.api.TableConfig;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
+import org.apache.flink.table.planner.codegen.OperatorFusionCodegenOutput;
+import org.apache.flink.table.planner.codegen.OperatorFusionCodegenSupport;
 import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
@@ -38,6 +42,7 @@ import org.apache.flink.table.runtime.operators.multipleinput.BatchMultipleFusio
 import org.apache.flink.table.runtime.operators.multipleinput.BatchMultipleInputStreamOperatorFactory;
 import org.apache.flink.table.runtime.operators.multipleinput.TableOperatorWrapperGenerator;
 import org.apache.flink.table.runtime.operators.multipleinput.input.InputSpec;
+import org.apache.flink.table.runtime.operators.multipleinput.input.MultipleInputSpec;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
 
 import org.apache.commons.lang3.tuple.Pair;
@@ -45,7 +50,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.table.api.config.ExecutionConfigOptions.TABLE_EXEC_MULTIPLE_INPUT_BHJ;
@@ -108,15 +116,71 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
     protected Transformation<RowData> translateToPlanInternal(
             PlannerBase planner, ExecNodeConfig config) {
         final List<Transformation<?>> inputTransforms = new ArrayList<>();
-        for (ExecEdge inputEdge : getInputEdges()) {
+        final List<ExecEdge> inputEdges = getInputEdges();
+        for (ExecEdge inputEdge : inputEdges) {
             inputTransforms.add(inputEdge.translateToPlan(planner));
         }
-        final Transformation<?> outputTransform = rootNode.translateToPlan(planner);
         final int[] readOrders =
                 getInputProperties().stream()
                         .map(InputProperty::getPriority)
                         .mapToInt(i -> i)
                         .toArray();
+
+        // multiple input codegen
+        if (supportMultipleCodegen(rootNode, originalEdges)) {
+            final List<MultipleInputSpec> multipleInputSpecs = new ArrayList<>();
+            final List<OperatorFusionCodegenSupport> codegenSupportInputs = new ArrayList<>();
+            int i = 0;
+            for (ExecEdge inputEdge : originalEdges) {
+                int multipleInputId = i + 1;
+                BatchExecNode<RowData> source = (BatchExecNode<RowData>) inputEdge.getSource();
+                if (!(source instanceof BatchExecExchange)) {
+                    BatchExecInputAdapter inputAdapter =
+                            new BatchExecInputAdapter(
+                                    TableConfig.getDefault(),
+                                    InputProperty.builder().priority(readOrders[i]).build(),
+                                    source.getOutputType(),
+                                    "BatchInputAdapter");
+                    inputAdapter.setInputEdges(
+                            Collections.singletonList(
+                                    ExecEdge.builder()
+                                            .source(source)
+                                            .target(inputAdapter)
+                                            .build()));
+
+                    BatchExecNode<RowData> target = (BatchExecNode<RowData>) inputEdge.getTarget();
+                    int targetInputIdx = 0;
+                    for (ExecEdge targetInputEdge : target.getInputEdges()) {
+                        if (inputEdge.equals(targetInputEdge)) {
+                            target.replaceInputEdge(
+                                    targetInputIdx,
+                                    ExecEdge.builder().source(inputAdapter).target(target).build());
+                        }
+                        targetInputIdx++;
+                    }
+                    codegenSupportInputs.add(
+                            inputAdapter.getInputCodegenOp(multipleInputId, planner, config));
+                } else {
+                    codegenSupportInputs.add(
+                            source.getInputCodegenOp(multipleInputId, planner, config));
+                }
+                // The input id and read order
+                multipleInputSpecs.add(new MultipleInputSpec(multipleInputId, readOrders[i]));
+                i++;
+            }
+
+            // wrap root operator of multiple codegen
+            OperatorFusionCodegenOutput codegenRootOp =
+                    new OperatorFusionCodegenOutput(
+                            new CodeGeneratorContext(
+                                    config, planner.getFlinkContext().getClassLoader()));
+            codegenRootOp.addInput(rootNode.translateToCodegenOp(planner));
+
+            // generate multiple input operator
+            codegenRootOp.generateMultipleOperator(multipleInputSpecs);
+        }
+
+        final Transformation<?> outputTransform = rootNode.translateToPlan(planner);
 
         final TableOperatorWrapperGenerator generator =
                 new TableOperatorWrapperGenerator(inputTransforms, outputTransform, readOrders);
@@ -204,5 +268,27 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
     @VisibleForTesting
     public ExecNode<?> getRootNode() {
         return rootNode;
+    }
+
+    private boolean supportMultipleCodegen(ExecNode rootNode, List<ExecEdge> multipleInputEdges) {
+        Set<ExecNode> innerNodes = new HashSet<>();
+        getAllExecNodes(innerNodes, rootNode, multipleInputEdges);
+
+        return innerNodes.stream()
+                .map(BatchExecNode.class::cast)
+                .map(BatchExecNode::supportMultipleCodegen)
+                .reduce(true, (n1, n2) -> n1 && n2);
+    }
+
+    private void getAllExecNodes(
+            Set<ExecNode> innerNodes, ExecNode currentNode, List<ExecEdge> multipleInputEdges) {
+        List<ExecEdge> inputEdges = currentNode.getInputEdges();
+        for (ExecEdge inputEdge : inputEdges) {
+            // If this edge is the input edge of multiple input, stop it
+            if (!multipleInputEdges.contains(inputEdge)) {
+                getAllExecNodes(innerNodes, inputEdge.getSource(), multipleInputEdges);
+            }
+        }
+        innerNodes.add(currentNode);
     }
 }

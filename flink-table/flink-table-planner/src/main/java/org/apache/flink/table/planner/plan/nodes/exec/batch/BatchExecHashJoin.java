@@ -26,6 +26,8 @@ import org.apache.flink.table.api.config.ExecutionConfigOptions;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
 import org.apache.flink.table.planner.codegen.LongHashJoinGenerator;
+import org.apache.flink.table.planner.codegen.OperatorFusionCodegenHashJoin;
+import org.apache.flink.table.planner.codegen.OperatorFusionCodegenSupport;
 import org.apache.flink.table.planner.codegen.ProjectionCodeGenerator;
 import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
@@ -62,6 +64,8 @@ public class BatchExecHashJoin extends ExecNodeBase<RowData>
     private final long estimatedLeftRowCount;
     private final long estimatedRightRowCount;
     private final boolean tryDistinctBuildRow;
+
+    private OperatorFusionCodegenHashJoin codegenHashJoin;
 
     public BatchExecHashJoin(
             ReadableConfig tableConfig,
@@ -292,5 +296,43 @@ public class BatchExecHashJoin extends ExecNodeBase<RowData>
         // Due to hash join maybe fallback to sort merge join, so here managed memory choose the
         // large one
         return Math.max(hashJoinManagedMemory, sortMergeJoinManagedMemory);
+    }
+
+    @Override
+    protected OperatorFusionCodegenSupport translateToCodegenOpInternal(
+            PlannerBase planner, ExecNodeConfig config) {
+        OperatorFusionCodegenSupport leftInput =
+                getInputEdges().get(0).translateToCodegenOp(planner);
+        OperatorFusionCodegenSupport rightInput =
+                getInputEdges().get(1).translateToCodegenOp(planner);
+        boolean compressionEnabled =
+                config.get(ExecutionConfigOptions.TABLE_EXEC_SPILL_COMPRESSION_ENABLED);
+        int compressionBlockSize =
+                (int)
+                        config.get(ExecutionConfigOptions.TABLE_EXEC_SPILL_COMPRESSION_BLOCK_SIZE)
+                                .getBytes();
+        long managedMemory = getLargeManagedMemory(joinSpec.getJoinType(), config);
+        codegenHashJoin =
+                new OperatorFusionCodegenHashJoin(
+                        new CodeGeneratorContext(
+                                config, planner.getFlinkContext().getClassLoader()),
+                        (RowType) getOutputType(),
+                        leftIsBuild,
+                        joinSpec,
+                        estimatedLeftAvgRowSize,
+                        estimatedRightAvgRowSize,
+                        estimatedLeftRowCount,
+                        estimatedRightRowCount,
+                        tryDistinctBuildRow,
+                        compressionEnabled,
+                        compressionBlockSize);
+        codegenHashJoin.addInput(leftInput);
+        codegenHashJoin.addInput(rightInput);
+        return codegenHashJoin;
+    }
+
+    @Override
+    public boolean supportMultipleCodegen() {
+        return true;
     }
 }

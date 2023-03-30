@@ -19,8 +19,23 @@
 package org.apache.flink.table.planner.plan.nodes.exec.batch;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.table.api.TableException;
+import org.apache.flink.table.planner.codegen.OperatorFusionCodegenSupport;
+import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
 
 /** Base class for batch {@link ExecNode}. */
 @Internal
-public interface BatchExecNode<T> extends ExecNode<T> {}
+public interface BatchExecNode<T> extends ExecNode<T> {
+
+    default boolean supportMultipleCodegen() {
+        return false;
+    }
+
+    default OperatorFusionCodegenSupport getInputCodegenOp(
+            int multipleInputId, PlannerBase planner, ExecNodeConfig config) {
+        throw new TableException(
+                "This node doesn't support as input node of multiple operator fusion codegen.");
+    }
+}

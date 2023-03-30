@@ -24,8 +24,10 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.streaming.api.transformations.PartitionTransformation;
 import org.apache.flink.streaming.runtime.partitioner.GlobalPartitioner;
+import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.api.config.ExecutionConfigOptions;
 import org.apache.flink.table.delegation.Planner;
+import org.apache.flink.table.planner.codegen.OperatorFusionCodegenSupport;
 import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.plan.nodes.exec.serde.ConfigurationJsonSerializerFilter;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.TransformationMetadata;
@@ -71,6 +73,8 @@ public abstract class ExecNodeBase<T> implements ExecNode<T> {
     private List<ExecEdge> inputEdges;
 
     private transient Transformation<T> transformation;
+
+    private transient OperatorFusionCodegenSupport codegenSupport;
 
     /** Holds the context information (id, name, version) as deserialized from a JSON plan. */
     @JsonProperty(value = FIELD_NAME_TYPE, access = JsonProperty.Access.WRITE_ONLY)
@@ -175,6 +179,21 @@ public abstract class ExecNodeBase<T> implements ExecNode<T> {
     }
 
     @Override
+    public OperatorFusionCodegenSupport translateToCodegenOp(Planner planner) {
+        if (codegenSupport == null) {
+            codegenSupport =
+                    translateToCodegenOpInternal(
+                            (PlannerBase) planner,
+                            ExecNodeConfig.of(
+                                    ((PlannerBase) planner).getTableConfig(),
+                                    persistedConfig,
+                                    isCompiled));
+        }
+
+        return codegenSupport;
+    }
+
+    @Override
     public void accept(ExecNodeVisitor visitor) {
         visitor.visit(this);
     }
@@ -195,6 +214,20 @@ public abstract class ExecNodeBase<T> implements ExecNode<T> {
      */
     protected abstract Transformation<T> translateToPlanInternal(
             PlannerBase planner, ExecNodeConfig config);
+
+    /**
+     * Internal method, translates this node into a codegen operator.
+     *
+     * @param planner The planner.
+     * @param config per-{@link ExecNode} configuration that contains the merged configuration from
+     *     various layers which all the nodes implementing this method should use, instead of
+     *     retrieving configuration from the {@code planner}. For more details check {@link
+     *     ExecNodeConfig}.
+     */
+    protected OperatorFusionCodegenSupport translateToCodegenOpInternal(
+            PlannerBase planner, ExecNodeConfig config) {
+        throw new TableException("This node doesn't support multiple operator fusion codegen now.");
+    }
 
     private boolean inputsContainSingleton(Transformation<T> transformation) {
         return inputsContainSingleton()

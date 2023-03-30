@@ -18,72 +18,71 @@
 
 package org.apache.flink.table.planner.plan.nodes.exec.batch;
 
+import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
-import org.apache.flink.table.planner.codegen.OperatorFusionCodegenCalc;
+import org.apache.flink.table.planner.codegen.OperatorFusionCodegenInput;
 import org.apache.flink.table.planner.codegen.OperatorFusionCodegenSupport;
 import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
+import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeContext;
 import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
-import org.apache.flink.table.planner.plan.nodes.exec.common.CommonExecCalc;
-import org.apache.flink.table.planner.utils.JavaScalaConversionUtil;
-import org.apache.flink.table.runtime.operators.TableStreamOperator;
+import org.apache.flink.table.planner.plan.nodes.exec.SingleTransformationTranslator;
+import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
 
-import org.apache.calcite.rex.RexNode;
-
-import javax.annotation.Nullable;
-
 import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
 
-/** Batch {@link ExecNode} for Calc. */
-public class BatchExecCalc extends CommonExecCalc implements BatchExecNode<RowData> {
+/** Batch {@link ExecNode} for multiple input operator fusion input. */
+public class BatchExecInputAdapter extends ExecNodeBase<RowData>
+        implements BatchExecNode<RowData>, SingleTransformationTranslator<RowData> {
 
-    private OperatorFusionCodegenCalc codegenCalc;
+    private OperatorFusionCodegenInput codegenInput;
 
-    public BatchExecCalc(
+    public BatchExecInputAdapter(
             ReadableConfig tableConfig,
-            List<RexNode> projection,
-            @Nullable RexNode condition,
             InputProperty inputProperty,
-            RowType outputType,
+            LogicalType outputType,
             String description) {
         super(
                 ExecNodeContext.newNodeId(),
-                ExecNodeContext.newContext(BatchExecCalc.class),
-                ExecNodeContext.newPersistedConfig(BatchExecCalc.class, tableConfig),
-                projection,
-                condition,
-                TableStreamOperator.class,
-                false, // retainHeader
+                ExecNodeContext.newContext(BatchExecInputAdapter.class),
+                ExecNodeContext.newPersistedConfig(BatchExecInputAdapter.class, tableConfig),
                 Collections.singletonList(inputProperty),
                 outputType,
                 description);
     }
 
     @Override
-    protected OperatorFusionCodegenSupport translateToCodegenOpInternal(
+    protected Transformation<RowData> translateToPlanInternal(
             PlannerBase planner, ExecNodeConfig config) {
-        OperatorFusionCodegenSupport input = getInputEdges().get(0).translateToCodegenOp(planner);
-        codegenCalc =
-                new OperatorFusionCodegenCalc(
-                        new CodeGeneratorContext(
-                                config, planner.getFlinkContext().getClassLoader()),
-                        (RowType) getOutputType(),
-                        JavaScalaConversionUtil.toScala(projection),
-                        JavaScalaConversionUtil.toScala(Optional.ofNullable(this.condition)),
-                        retainHeader);
-        codegenCalc.addInput(input);
-        return codegenCalc;
+        return (Transformation<RowData>) getInputEdges().get(0).translateToPlan(planner);
     }
 
     @Override
     public boolean supportMultipleCodegen() {
         return true;
+    }
+
+    @Override
+    protected OperatorFusionCodegenSupport translateToCodegenOpInternal(
+            PlannerBase planner, ExecNodeConfig config) {
+        assert (codegenInput != null);
+        return codegenInput;
+    }
+
+    @Override
+    public OperatorFusionCodegenSupport getInputCodegenOp(
+            int multipleInputId, PlannerBase planner, ExecNodeConfig config) {
+        codegenInput =
+                new OperatorFusionCodegenInput(
+                        new CodeGeneratorContext(
+                                config, planner.getFlinkContext().getClassLoader()),
+                        multipleInputId,
+                        (RowType) getOutputType());
+        return codegenInput;
     }
 }

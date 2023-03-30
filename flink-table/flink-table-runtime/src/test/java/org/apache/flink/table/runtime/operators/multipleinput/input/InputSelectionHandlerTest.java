@@ -26,6 +26,7 @@ import org.junit.Test;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -41,7 +42,11 @@ public class InputSelectionHandlerTest extends MultipleInputTestBase {
                         new InputSpec(3, 0, createTwoInputOperatorWrapper("input3"), 1),
                         new InputSpec(4, 0, createTwoInputOperatorWrapper("input4"), 2),
                         new InputSpec(5, 0, createOneInputOperatorWrapper("input5"), 1));
-        InputSelectionHandler handler = new InputSelectionHandler(inputSpecs);
+        InputSelectionHandler handler =
+                new InputSelectionHandler(
+                        inputSpecs.stream()
+                                .map(InputSpec::getMultipleInputSpec)
+                                .collect(Collectors.toList()));
         assertThat(handler.getInputSelection()).isEqualTo(InputSelection.ALL);
 
         List<Integer> inputIds = Arrays.asList(1, 2, 3, 4, 5);
@@ -61,7 +66,11 @@ public class InputSelectionHandlerTest extends MultipleInputTestBase {
                         new InputSpec(3, 0, createTwoInputOperatorWrapper("input3"), 1),
                         new InputSpec(4, 0, createTwoInputOperatorWrapper("input4"), 2),
                         new InputSpec(5, 2, createOneInputOperatorWrapper("input5"), 1));
-        InputSelectionHandler handler = new InputSelectionHandler(inputSpecs);
+        InputSelectionHandler handler =
+                new InputSelectionHandler(
+                        inputSpecs.stream()
+                                .map(InputSpec::getMultipleInputSpec)
+                                .collect(Collectors.toList()));
         assertThat(handler.getInputSelection())
                 .isEqualTo(new InputSelection.Builder().select(3).select(4).build(5));
 

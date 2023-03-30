@@ -47,6 +47,11 @@ import scala.collection.mutable
  */
 class CodeGeneratorContext(val tableConfig: ReadableConfig, val classLoader: ClassLoader) {
 
+  // map of initial input unboxing expressions that will be added only once
+  // (inputTerm, index) -> expr
+  val reusableInputExprs: mutable.Map[String, Seq[GeneratedExpression]] =
+    mutable.Map[String, Seq[GeneratedExpression]]()
+
   // holding a list of objects that could be used passed into generated class
   val references: mutable.ArrayBuffer[AnyRef] = new mutable.ArrayBuffer[AnyRef]()
 
@@ -88,6 +93,14 @@ class CodeGeneratorContext(val tableConfig: ReadableConfig, val classLoader: Cla
   // the code needs to be split;
   // we use a LinkedHashSet to keep the insertion order
   private val reusablePerRecordStatements: mutable.LinkedHashSet[String] =
+    mutable.LinkedHashSet[String]()
+
+  // set of statements that will be added only for multiple fusion codegen process method
+  private val reusableMultipleProcessStatements: mutable.LinkedHashSet[String] =
+    mutable.LinkedHashSet[String]()
+
+  // set of statements that will be added only for multiple fusion codegen endInput method
+  private val reusableMultipleEndInputStatements: mutable.LinkedHashSet[String] =
     mutable.LinkedHashSet[String]()
 
   // map of initial input unboxing expressions that will be added only once
@@ -143,6 +156,12 @@ class CodeGeneratorContext(val tableConfig: ReadableConfig, val classLoader: Cla
   // ---------------------------------------------------------------------------------
   // Getter
   // ---------------------------------------------------------------------------------
+
+  def getReusableInputExprs(inputTerm: String, index: Int): GeneratedExpression =
+    reusableInputExprs.get(inputTerm) match {
+      case Some(exprs) => exprs(index)
+      case None => null
+    }
 
   def getReusableInputUnboxingExprs(inputTerm: String, index: Int): Option[GeneratedExpression] =
     reusableInputUnboxingExprs.get((inputTerm, index))
@@ -307,6 +326,24 @@ class CodeGeneratorContext(val tableConfig: ReadableConfig, val classLoader: Cla
 
   /**
    * @return
+   *   code block of statements that need to be placed in the getInputs() method of
+   *   [MultipleInputStreamOperator]
+   */
+  def reuseMultipleProcessCode(): String = {
+    reusableMultipleProcessStatements.mkString(",\n")
+  }
+
+  /**
+   * @return
+   *   code block of statements that need to be placed in the getInputs() method of
+   *   [BoundedMultiInput]
+   */
+  def reuseMultipleEndInputCode(): String = {
+    reusableMultipleEndInputStatements.mkString("\n")
+  }
+
+  /**
+   * @return
    *   code block of statements that unbox input variables to a primitive variable and a
    *   corresponding null flag variable
    */
@@ -382,6 +419,18 @@ class CodeGeneratorContext(val tableConfig: ReadableConfig, val classLoader: Cla
 
   /** Adds a reusable cleanup statement */
   def addReusableCleanupStatement(s: String): Unit = reusableCleanupStatements.add(s)
+
+  /** Adds a reusable multiple process statement */
+  def addReusableMultipleProcessStatement(s: String): Unit =
+    reusableMultipleProcessStatements.add(s)
+
+  /** Adds a reusable multiple endInput statement */
+  def addReusableMultipleEndInputStatement(s: String): Unit =
+    reusableMultipleEndInputStatements.add(s)
+
+  /** Adds a reusable input unboxing expression */
+  def addReusableInputExprs(inputTerm: String, expr: Seq[GeneratedExpression]): Unit =
+    reusableInputExprs(inputTerm) = expr
 
   /** Adds a reusable input unboxing expression */
   def addReusableInputUnboxingExprs(

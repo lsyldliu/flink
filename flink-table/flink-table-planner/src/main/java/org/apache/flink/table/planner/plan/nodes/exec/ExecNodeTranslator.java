@@ -21,6 +21,7 @@ package org.apache.flink.table.planner.plan.nodes.exec;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.table.delegation.Planner;
+import org.apache.flink.table.planner.codegen.OperatorFusionCodegenSupport;
 
 /**
  * An {@link ExecNodeTranslator} is responsible for translating an {@link ExecNode} to {@link
@@ -39,4 +40,6 @@ public interface ExecNodeTranslator<T> {
      * @param planner The {@link Planner} of the translated graph.
      */
     Transformation<T> translateToPlan(Planner planner);
+
+    OperatorFusionCodegenSupport translateToCodegenOp(Planner planner);
 }

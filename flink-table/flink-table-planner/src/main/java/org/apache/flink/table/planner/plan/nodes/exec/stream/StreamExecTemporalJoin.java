@@ -227,7 +227,7 @@ public class StreamExecTemporalJoin extends ExecNodeBase<RowData>
         // the code-generated function won't process null inputs
         final CodeGeneratorContext ctx = new CodeGeneratorContext(config, classLoader);
         final ExprCodeGenerator exprGenerator =
-                new ExprCodeGenerator(ctx, false)
+                new ExprCodeGenerator(ctx, false, false)
                         .bindInput(
                                 leftInputType,
                                 CodeGenUtils.DEFAULT_INPUT1_TERM(),

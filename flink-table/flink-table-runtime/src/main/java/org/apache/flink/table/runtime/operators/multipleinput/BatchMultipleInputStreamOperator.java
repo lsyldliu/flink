@@ -30,6 +30,7 @@ import org.apache.flink.table.runtime.operators.multipleinput.input.InputSelecti
 import org.apache.flink.table.runtime.operators.multipleinput.input.InputSpec;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkState;
 
@@ -46,7 +47,11 @@ public class BatchMultipleInputStreamOperator extends MultipleInputStreamOperato
             List<TableOperatorWrapper<?>> headWrapper,
             TableOperatorWrapper<?> tailWrapper) {
         super(parameters, inputSpecs, headWrapper, tailWrapper);
-        inputSelectionHandler = new InputSelectionHandler(inputSpecs);
+        inputSelectionHandler =
+                new InputSelectionHandler(
+                        inputSpecs.stream()
+                                .map(InputSpec::getMultipleInputSpec)
+                                .collect(Collectors.toList()));
     }
 
     @Override
