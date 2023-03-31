@@ -276,11 +276,11 @@ object BridgingFunctionGenUtil {
     } else {
       s"($externalResultTypeTerm) (${typeTerm(externalResultClassBoxed)})"
     }
-    val externalResultTerm = ctx.addReusableLocalVariable(externalResultTypeTerm, "externalResult")
+    val externalResultTerm = newName("externalResult")
     val externalCode =
       s"""
          |${externalOperands.map(_.code).mkString("\n")}
-         |$externalResultTerm = $externalResultCasting $functionTerm
+         |$externalResultTypeTerm $externalResultTerm = $externalResultCasting $functionTerm
          |  .$SCALAR_EVAL(${externalOperands.map(_.resultTerm).mkString(", ")});
          |""".stripMargin
 

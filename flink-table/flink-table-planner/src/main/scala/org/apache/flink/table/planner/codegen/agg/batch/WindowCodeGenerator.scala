@@ -366,11 +366,11 @@ abstract class WindowCodeGenerator(
           inputTerm,
           windowedGroupKeyType.getFieldCount - 1)
         if (inputTimeIsDate) {
-          val timestamp = ctx.addReusableLocalVariable("long", "timestamp")
+          val timestamp = newName("timestamp")
           val convertToLongCode =
             s"""
                |  ${ret.code}
-               |  $timestamp = ${convertToLongValue(ret.resultTerm)};
+               |  long $timestamp = ${convertToLongValue(ret.resultTerm)};
            """.stripMargin
           GeneratedExpression(timestamp, ret.nullTerm, convertToLongCode, new BigIntType())
         } else {

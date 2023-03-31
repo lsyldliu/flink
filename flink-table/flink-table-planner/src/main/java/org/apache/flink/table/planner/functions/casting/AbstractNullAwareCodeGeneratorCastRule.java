@@ -21,6 +21,7 @@ package org.apache.flink.table.planner.functions.casting;
 import org.apache.flink.table.types.logical.LogicalType;
 
 import static org.apache.flink.table.planner.codegen.CodeGenUtils.isPrimitiveNullable;
+import static org.apache.flink.table.planner.codegen.CodeGenUtils.newName;
 import static org.apache.flink.table.planner.codegen.CodeGenUtils.primitiveDefaultValue;
 import static org.apache.flink.table.planner.codegen.CodeGenUtils.primitiveTypeTermForType;
 
@@ -58,15 +59,16 @@ abstract class AbstractNullAwareCodeGeneratorCastRule<IN, OUT>
         final boolean isResultNullable = inputType.isNullable() || isPrimitiveNullable(targetType);
         String nullTerm;
         if (isResultNullable) {
-            nullTerm = context.declareVariable("boolean", "isNull");
-            writer.assignStmt(nullTerm, inputIsNullTerm);
+            nullTerm = newName("isNull");
+            writer.declStmt("boolean", nullTerm, inputIsNullTerm);
         } else {
             nullTerm = "false";
         }
 
         // Create the result value variable
-        final String returnTerm =
-                context.declareVariable(primitiveTypeTermForType(targetType), "result");
+
+        final String returnTerm = newName("result");
+        writer.declStmt(primitiveTypeTermForType(targetType), returnTerm);
 
         // Generate the code block
         final String castCodeBlock =

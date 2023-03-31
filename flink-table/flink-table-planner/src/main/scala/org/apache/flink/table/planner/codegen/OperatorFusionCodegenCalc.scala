@@ -55,11 +55,7 @@ class OperatorFusionCodegenCalc(
       inputId: Int,
       input: Seq[GeneratedExpression],
       row: GeneratedExpression): String = {
-    val inputType = inputs(0).getOutputType
-    val inputTerm = CodeGenUtils.DEFAULT_INPUT1_TERM
-    getExprCodeGenerator.bindInput(inputType, inputTerm = inputTerm)
-
-    val onlyFilter = projection.lengthCompare(inputType.getFieldCount) == 0 &&
+    val onlyFilter = projection.lengthCompare(inputs(0).getOutputType.getFieldCount) == 0 &&
       projection.zipWithIndex.forall {
         case (rexNode, index) =>
           rexNode.isInstanceOf[RexInputRef] && rexNode.asInstanceOf[RexInputRef].getIndex == index
@@ -72,7 +68,6 @@ class OperatorFusionCodegenCalc(
     } else if (condition.isEmpty) { // only projection
       val projectionExprs = projection.map(getExprCodeGenerator.generateExpression)
       s"""
-         |${operatorCtx.reuseInputUnboxingCode()}
          |${consumeProcess(multipleCtx, projectionExprs)}
          |""".stripMargin
     } else {
@@ -80,7 +75,6 @@ class OperatorFusionCodegenCalc(
       // only filter
       if (onlyFilter) {
         s"""
-           |${operatorCtx.reuseInputUnboxingCode()}
            |${filterCondition.code}
            |if (${filterCondition.resultTerm}) {
            |  ${consumeProcess(multipleCtx, input)}
@@ -91,6 +85,7 @@ class OperatorFusionCodegenCalc(
         val filterInputSet = Set(operatorCtx.reusableInputUnboxingExprs.keySet.toSeq: _*)
 
         // if any filter conditions, projection code will enter an new scope
+        // TODO filter 已经计算过的表达式，参考spark，在project中无需再重复计算，因此需要把其input表达式code置为空，不然会存在变量重复定义问题
         val projectionExprs = projection.map(getExprCodeGenerator.generateExpression)
 
         val projectionInputCode = operatorCtx.reusableInputUnboxingExprs
@@ -99,10 +94,8 @@ class OperatorFusionCodegenCalc(
           .map(_.code)
           .mkString("\n")
         s"""
-           |$filterInputCode
            |${filterCondition.code}
            |if (${filterCondition.resultTerm}) {
-           |  $projectionInputCode
            |  ${consumeProcess(multipleCtx, projectionExprs)}
            |}
            |""".stripMargin

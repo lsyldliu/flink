@@ -18,7 +18,7 @@
 package org.apache.flink.table.planner.codegen.calls
 
 import org.apache.flink.table.planner.codegen.{CodeGeneratorContext, GeneratedExpression}
-import org.apache.flink.table.planner.codegen.CodeGenUtils.{className, primitiveDefaultValue, primitiveTypeTermForType}
+import org.apache.flink.table.planner.codegen.CodeGenUtils.{className, newNames, primitiveDefaultValue, primitiveTypeTermForType}
 import org.apache.flink.table.planner.codegen.calls.ScalarOperatorGens.toCodegenCastContext
 import org.apache.flink.table.planner.functions.casting.{CastCodeBlock, CastRuleProvider, CodeGeneratorCastRule, ExpressionCodeGeneratorCastRule}
 import org.apache.flink.table.types.logical.LogicalType
@@ -46,8 +46,7 @@ class IfCallGen() extends CallGenerator {
 
     val resultTypeTerm = primitiveTypeTermForType(returnType)
     val resultDefault = primitiveDefaultValue(returnType)
-    val Seq(resultTerm, nullTerm) =
-      ctx.addReusableLocalVariables((resultTypeTerm, "result"), ("boolean", "isNull"))
+    val Seq(resultTerm, nullTerm) = newNames("result", "isNull")
 
     val resultCode =
       s"""
@@ -55,7 +54,8 @@ class IfCallGen() extends CallGenerator {
          |${castedResultTerm1.getCode}
          |${castedResultTerm2.getCode}
          |${operands.head.code}
-         |$resultTerm = $resultDefault;
+         |$resultTypeTerm $resultTerm = $resultDefault;
+         |boolean $nullTerm;
          |if (${operands.head.resultTerm}) {
          |  ${operands(1).code}
          |  if (!${operands(1).nullTerm}) {

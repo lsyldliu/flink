@@ -151,9 +151,9 @@ class OperatorFusionCodegenHashJoin(
         val probeSer = new BinaryRowDataSerializer(leftInputType.getFieldCount)
         probeSerTerm = operatorCtx.addReusableObject(probeSer, "probeSer")
 
-        val (keyEv, anyNull) = genStreamSideJoinKey(keyType, joinSpec.getRightKeys, input)
+        val (keyEv, anyNull) = genStreamSideJoinKey(keyType, joinSpec.getLeftKeys, input)
         val (matched, checkCondition, buildVars) = getJoinCondition(rightInputType)
-        val resultVars = buildVars ++ input
+        val resultVars = input ++ buildVars
         val buildIterTerm = newName("buildIter")
         val joinCode = hashJoinType match {
           case HashJoinType.INNER =>
@@ -183,7 +183,7 @@ class OperatorFusionCodegenHashJoin(
         buildSerTerm = operatorCtx.addReusableObject(buildSer, "buildSer")
 
         val (nullCheckBuildCode, nullCheckBuildTerm) =
-          genAnyNullsInKeys(joinSpec.getLeftKeys, input)
+          genAnyNullsInKeys(joinSpec.getRightKeys, input)
         s"""
            |$nullCheckBuildCode
            |if (!$nullCheckBuildTerm) {
@@ -311,12 +311,13 @@ class OperatorFusionCodegenHashJoin(
   protected def genBuildSideVars(buildRow: String, buildType: RowType): Seq[GeneratedExpression] = {
     val exprGenerator = new ExprCodeGenerator(
       new CodeGeneratorContext(operatorCtx.tableConfig, operatorCtx.classLoader),
-      false)
+      false,
+      true)
       .bindInput(buildType, inputTerm = buildRow)
 
     hashJoinType match {
       case HashJoinType.INNER =>
-        exprGenerator.generateInputExpression()
+        exprGenerator.generateInputAccessExprs()
       case _ =>
         throw new IllegalArgumentException(
           s"JoinCodegenSupport.genBuildSideVars should not take $hashJoinType as the JoinType")

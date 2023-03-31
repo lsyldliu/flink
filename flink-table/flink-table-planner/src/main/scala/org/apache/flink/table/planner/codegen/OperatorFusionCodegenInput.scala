@@ -54,10 +54,10 @@ class OperatorFusionCodegenInput(
   }
 
   override def doProduceEndInput(multipleCtx: CodeGeneratorContext): Unit = {
-    multipleCtx.addReusableMultipleProcessStatement(s"""
-                                                       |case $multipleInputId:
-                                                       |  ${consumeEndInput(multipleCtx)}
-                                                       |  break;
-                                                       |""".stripMargin)
+    multipleCtx.addReusableMultipleEndInputStatement(s"""
+                                                        |case $multipleInputId:
+                                                        |  ${consumeEndInput(multipleCtx)}
+                                                        |  break;
+                                                        |""".stripMargin)
   }
 }

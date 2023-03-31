@@ -392,10 +392,10 @@ class MatchCodeGenerator(
   private def generateProctimeTimestamp(): GeneratedExpression = {
     val resultType = new LocalZonedTimestampType(3)
     val resultTypeTerm = primitiveTypeTermForType(resultType)
-    val resultTerm = ctx.addReusableLocalVariable(resultTypeTerm, "result")
+    val resultTerm = newName("result")
     val resultCode =
       s"""
-         |$resultTerm = $TIMESTAMP_DATA.fromEpochMillis($contextTerm.currentProcessingTime());
+         |$resultTypeTerm $resultTerm = $TIMESTAMP_DATA.fromEpochMillis($contextTerm.currentProcessingTime());
          |""".stripMargin.trim
     // the proctime has been materialized, so it's TIMESTAMP now, not PROCTIME_INDICATOR
     GeneratedExpression(resultTerm, NEVER_NULL, resultCode, resultType)

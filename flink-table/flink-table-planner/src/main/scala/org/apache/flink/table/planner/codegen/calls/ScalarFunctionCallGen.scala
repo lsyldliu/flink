@@ -58,7 +58,7 @@ class ScalarFunctionCallGen(scalarFunction: ScalarFunction) extends CallGenerato
     } else {
       boxedTypeTermForType(returnType)
     }
-    val resultTerm = ctx.addReusableLocalVariable(resultTypeTerm, "result")
+    val resultTerm = newName("result")
     val evalResult = s"$functionReference.eval(${parameters.map(_.resultTerm).mkString(", ")})"
     val resultExternalType =
       UserDefinedFunctionUtils.getResultTypeOfScalarFunction(scalarFunction, operandTypes)
@@ -93,6 +93,7 @@ class ScalarFunctionCallGen(scalarFunction: ScalarFunction) extends CallGenerato
     val functionCallCode =
       s"""
          |${parameters.map(_.code).mkString("\n")}
+         |$resultTypeTerm $resultTerm;
          |$setResult
          |""".stripMargin
 

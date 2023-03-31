@@ -17,7 +17,7 @@
  */
 package org.apache.flink.table.planner.codegen
 
-import org.apache.flink.table.planner.codegen.CodeGenUtils.boxedTypeTermForType
+import org.apache.flink.table.planner.codegen.CodeGenUtils.{boxedTypeTermForType, newName}
 import org.apache.flink.table.runtime.typeutils.TypeCheckUtils
 import org.apache.flink.table.types.logical.LogicalType
 
@@ -42,6 +42,12 @@ case class GeneratedExpression(
     code: String,
     resultType: LogicalType,
     literalValue: Option[Any] = None) {
+
+  /**
+   * This flag is used to represent whether code has been wrapped into code block, if true, we
+   * return empty to guarantee the expression is evaluated only once.
+   */
+  private var codeUsed = false
 
   /**
    * Indicates a constant expression do not reference input and can thus be used in the member area
@@ -87,11 +93,11 @@ case class GeneratedExpression(
       // if the type need copy, it must be a boxed type
       val typeTerm = boxedTypeTermForType(resultType)
       val serTerm = ctx.addReusableTypeSerializer(resultType)
-      val newResultTerm = ctx.addReusableLocalVariable(typeTerm, "field")
+      val newResultTerm = newName("field")
       val newCode =
         s"""
            |$code
-           |$newResultTerm = $resultTerm;
+           |$typeTerm $newResultTerm = $resultTerm;
            |if (!$nullTerm) {
            |  $newResultTerm = ($typeTerm) ($serTerm.copy($newResultTerm));
            |}

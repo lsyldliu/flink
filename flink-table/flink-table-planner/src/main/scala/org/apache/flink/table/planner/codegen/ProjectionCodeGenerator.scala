@@ -174,16 +174,14 @@ object ProjectionCodeGenerator {
               avgAggFunction.getSumType.getLogicalType,
               aggInfo.agg.getArgList.get(0))
             fieldExprs += genValueProjectionForCountAggFunc(
-              ctx,
               inputTerm,
               aggInfo.agg.getArgList.get(0))
           case _: CountAggFunction =>
             fieldExprs += genValueProjectionForCountAggFunc(
-              ctx,
               inputTerm,
               aggInfo.agg.getArgList.get(0))
           case _: Count1AggFunction =>
-            fieldExprs += genValueProjectionForCount1AggFunc(ctx)
+            fieldExprs += genValueProjectionForCount1AggFunc
         }
     }
 
@@ -235,13 +233,12 @@ object ProjectionCodeGenerator {
     val resultTypeTerm = primitiveTypeTermForType(fieldType)
     val defaultValue = primitiveDefaultValue(fieldType)
     val readCode = rowFieldReadAccess(index.toString, inputTerm, fieldType)
-    val Seq(fieldTerm, nullTerm) =
-      ctx.addReusableLocalVariables((resultTypeTerm, "field"), ("boolean", "isNull"))
+    val Seq(fieldTerm, nullTerm) = newNames("field", "isNull")
 
     val inputCode =
       s"""
-         |$nullTerm = $inputTerm.isNullAt($index);
-         |$fieldTerm = $defaultValue;
+         |boolean $nullTerm = $inputTerm.isNullAt($index);
+         |$resultTypeTerm $fieldTerm = $defaultValue;
          |if (!$nullTerm) {
          |  $fieldTerm = $readCode;
          |}
@@ -256,16 +253,13 @@ object ProjectionCodeGenerator {
    * Do projection for grouping function 'count(col)' if adaptive local hash aggregation takes
    * effect. 'count(col)' will be convert to 1L if col is not null and convert to 0L if col is null.
    */
-  def genValueProjectionForCountAggFunc(
-      ctx: CodeGeneratorContext,
-      inputTerm: String,
-      index: Int): GeneratedExpression = {
-    val Seq(fieldTerm, nullTerm) =
-      ctx.addReusableLocalVariables(("long", "field"), ("boolean", "isNull"))
+  def genValueProjectionForCountAggFunc(inputTerm: String, index: Int): GeneratedExpression = {
+    val Seq(fieldTerm, nullTerm) = newNames("field", "isNull")
 
     val inputCode =
       s"""
-         |$fieldTerm = 0L;
+         |boolean $nullTerm;
+         |long $fieldTerm = 0L;
          |if (!$inputTerm.isNullAt($index)) {
          |  $fieldTerm = 1L;
          |}
@@ -278,12 +272,12 @@ object ProjectionCodeGenerator {
    * Do projection for grouping function 'count(*)' or 'count(1)' if adaptive local hash agg takes
    * effect. 'count(*) or count(1)' will be convert to 1L and transmitted to downstream.
    */
-  def genValueProjectionForCount1AggFunc(ctx: CodeGeneratorContext): GeneratedExpression = {
-    val Seq(fieldTerm, nullTerm) =
-      ctx.addReusableLocalVariables(("long", "field"), ("boolean", "isNull"))
+  def genValueProjectionForCount1AggFunc: GeneratedExpression = {
+    val Seq(fieldTerm, nullTerm) = newNames("field", "isNull")
     val inputCode =
       s"""
-         |$fieldTerm = 1L;
+         |boolean $nullTerm;
+         |long $fieldTerm = 1L;
          |""".stripMargin.trim
     GeneratedExpression(fieldTerm, nullTerm, inputCode, new BigIntType())
   }

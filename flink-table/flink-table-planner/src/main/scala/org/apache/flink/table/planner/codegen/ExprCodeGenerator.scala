@@ -172,7 +172,7 @@ class ExprCodeGenerator(
   }
 
   /** Generates fields expression from input row. */
-  def generateInputExpression(): Seq[GeneratedExpression] = {
+  def generateInputAccessExprs(): Seq[GeneratedExpression] = {
     val input1AccessExprs = input1Mapping.map {
       case TimeIndicatorTypeInfo.ROWTIME_STREAM_MARKER |
           TimeIndicatorTypeInfo.ROWTIME_BATCH_MARKER =>
@@ -481,12 +481,13 @@ class ExprCodeGenerator(
 
     val resultTypeTerm = primitiveTypeTermForType(resultType)
     val defaultValue = primitiveDefaultValue(resultType)
-    val Seq(resultTerm, nullTerm) =
-      ctx.addReusableLocalVariables((resultTypeTerm, "result"), ("boolean", "isNull"))
+    val Seq(resultTerm, nullTerm) = newNames("result", "isNull")
 
     val resultCode =
       s"""
          |${refExpr.code}
+         |$resultTypeTerm $resultTerm;
+         |boolean $nullTerm;
          |if (${refExpr.nullTerm}) {
          |  $resultTerm = $defaultValue;
          |  $nullTerm = true;

@@ -69,8 +69,7 @@ object GenerateUtils {
     } else {
       primitiveTypeTermForType(returnType)
     }
-    val nullTerm = ctx.addReusableLocalVariable("boolean", "isNull")
-    val resultTerm = ctx.addReusableLocalVariable(resultTypeTerm, "result")
+    val Seq(nullTerm, resultTerm) = newNames("isNull", "result")
     val defaultValue = primitiveDefaultValue(returnType)
     val isResultNullable = resultNullable || (isReference(returnType) && !isTemporal(returnType))
     val nullTermCode = if (isResultNullable) {
@@ -101,8 +100,8 @@ object GenerateUtils {
     val resultCode = if (operands.nonEmpty) {
       s"""
          |${operands.map(_.code).mkString("\n")}
-         |$nullTerm = ${operands.map(_.nullTerm).mkString(" || ")};
-         |$resultTerm = $defaultValue;
+         |boolean $nullTerm = ${operands.map(_.nullTerm).mkString(" || ")};
+         |$resultTypeTerm $resultTerm = $defaultValue;
          |if (!$nullTerm) {
          |  $wrappedResultAssignment
          |  $nullTermCode
@@ -111,7 +110,8 @@ object GenerateUtils {
     } else {
       s"""
          |${operands.map(_.code).mkString("\n")}
-         |$nullTerm = false;
+         |boolean $nullTerm = false;
+         |$resultTypeTerm $resultTerm;
          |$wrappedResultAssignment
          |$nullTermCode
          |""".stripMargin
@@ -146,8 +146,7 @@ object GenerateUtils {
       primitiveTypeTermForType(returnType)
     }
     val defaultValue = primitiveDefaultValue(returnType)
-    val nullTerm = ctx.addReusableLocalVariable("boolean", "isNull")
-    val resultTerm = ctx.addReusableLocalVariable(resultTypeTerm, "result")
+    val Seq(nullTerm, resultTerm) = newNames("isNull", "result")
     val isResultNullable = resultNullable || (isReference(returnType) && !isTemporal(returnType))
     val nullTermCode = if (isResultNullable) {
       s"$nullTerm = ($resultTerm == null);"
@@ -182,6 +181,8 @@ object GenerateUtils {
     val resultCode = if (resultNullable) {
       s"""
          |${operands.map(_.code).mkString("\n")}
+         |boolean $nullTerm;
+         |$resultTypeTerm $resultTerm;
          |$wrappedResultAssignment
          |$nullTermCode
          |if ($nullTerm) {
@@ -191,6 +192,8 @@ object GenerateUtils {
     } else {
       s"""
          |${operands.map(_.code).mkString("\n")}
+         |boolean $nullTerm;
+         |$resultTypeTerm $resultTerm;
          |$wrappedResultAssignment
          |$nullTermCode
        """.stripMargin
@@ -371,10 +374,10 @@ object GenerateUtils {
       contextTerm: String): GeneratedExpression = {
     val resultType = new LocalZonedTimestampType(3)
     val resultTypeTerm = primitiveTypeTermForType(resultType)
-    val resultTerm = ctx.addReusableLocalVariable(resultTypeTerm, "result")
+    val resultTerm = newName("result")
     val resultCode =
       s"""
-         |$resultTerm = $TIMESTAMP_DATA.fromEpochMillis(
+         |$resultTypeTerm $resultTerm = $TIMESTAMP_DATA.fromEpochMillis(
          |  $contextTerm.timerService().currentProcessingTime());
          |""".stripMargin.trim
     // the proctime has been materialized, so it's TIMESTAMP now, not PROCTIME_INDICATOR
@@ -395,21 +398,18 @@ object GenerateUtils {
       new TimestampType(true, TimestampKind.ROWTIME, 3)
     }
     val resultTypeTerm = primitiveTypeTermForType(resultType)
-    val Seq(resultTerm, nullTerm, timestamp) = ctx.addReusableLocalVariables(
-      (resultTypeTerm, "result"),
-      ("boolean", "isNull"),
-      ("Long", "timestamp"))
+    val Seq(resultTerm, nullTerm, timestamp) = newNames("result", "isNull", "timestamp")
 
     val accessCode =
       s"""
-         |$timestamp = $contextTerm.timestamp();
+         |Long $timestamp = $contextTerm.timestamp();
          |if ($timestamp == null) {
          |  throw new RuntimeException("Rowtime timestamp is not defined. Please make sure that " +
          |    "a proper TimestampAssigner is defined and the stream environment " +
          |    "uses the EventTime time characteristic.");
          |}
-         |$resultTerm = $TIMESTAMP_DATA.fromEpochMillis($timestamp);
-         |$nullTerm = false;
+         |$resultTypeTerm $resultTerm = $TIMESTAMP_DATA.fromEpochMillis($timestamp);
+         |boolean $nullTerm = false;
        """.stripMargin.trim
 
     GeneratedExpression(resultTerm, nullTerm, accessCode, resultType)
@@ -420,17 +420,14 @@ object GenerateUtils {
       contextTerm: String,
       resultType: LogicalType): GeneratedExpression = {
     val resultTypeTerm = primitiveTypeTermForType(resultType)
-    val Seq(resultTerm, nullTerm, currentWatermarkTerm) = ctx.addReusableLocalVariables(
-      (resultTypeTerm, "result"),
-      ("boolean", "isNull"),
-      ("long", "currentWatermark")
-    )
+    val Seq(resultTerm, nullTerm, currentWatermarkTerm) =
+      newNames("result", "isNull", "currentWatermark")
 
     val code =
       s"""
-         |$currentWatermarkTerm = $contextTerm.timerService().currentWatermark();
-         |$nullTerm = ($currentWatermarkTerm == java.lang.Long.MIN_VALUE);
-         |$resultTerm = $TIMESTAMP_DATA.fromEpochMillis($currentWatermarkTerm);
+         |long $currentWatermarkTerm = $contextTerm.timerService().currentWatermark();
+         |boolean $nullTerm = ($currentWatermarkTerm == java.lang.Long.MIN_VALUE);
+         |$resultTypeTerm $resultTerm = $TIMESTAMP_DATA.fromEpochMillis($currentWatermarkTerm);
          |""".stripMargin.trim
     GeneratedExpression(resultTerm, nullTerm, code, resultType)
   }
@@ -502,15 +499,14 @@ object GenerateUtils {
     val fieldType = getFieldType(inputType, index)
     val resultTypeTerm = primitiveTypeTermForType(fieldType)
     val defaultValue = primitiveDefaultValue(fieldType)
-    val Seq(resultTerm, nullTerm) =
-      ctx.addReusableLocalVariables((resultTypeTerm, "result"), ("boolean", "isNull"))
+    val Seq(resultTerm, nullTerm) = newNames("result", "isNull")
 
     val fieldAccessExpr = generateFieldAccess(ctx, inputType, inputTerm, index, deepCopy)
 
     val inputCheckCode =
       s"""
-         |$resultTerm = $defaultValue;
-         |$nullTerm = true;
+         |$resultTypeTerm $resultTerm = $defaultValue;
+         |boolean $nullTerm = true;
          |if ($inputTerm != null) {
          |  ${fieldAccessExpr.code}
          |  $resultTerm = ${fieldAccessExpr.resultTerm};
@@ -544,14 +540,12 @@ object GenerateUtils {
 
     val resultTypeTerm = primitiveTypeTermForType(inputType)
     val defaultValue = primitiveDefaultValue(inputType)
-
-    val Seq(resultTerm, nullTerm) =
-      ctx.addReusableLocalVariables((resultTypeTerm, "result"), ("boolean", "isNull"))
+    val Seq(resultTerm, nullTerm) = newNames("result", "isNull")
 
     val wrappedCode =
       s"""
-         |$nullTerm = $inputTerm == null;
-         |$resultTerm = $defaultValue;
+         |boolean $nullTerm = $inputTerm == null;
+         |$resultTypeTerm $resultTerm = $defaultValue;
          |if (!$nullTerm) {
          |  $resultTerm = $inputUnboxingTerm;
          |}
@@ -599,13 +593,12 @@ object GenerateUtils {
         val resultTypeTerm = primitiveTypeTermForType(fieldType)
         val defaultValue = primitiveDefaultValue(fieldType)
         val readCode = rowFieldReadAccess(index.toString, inputTerm, fieldType)
-        val Seq(fieldTerm, nullTerm) =
-          ctx.addReusableLocalVariables((resultTypeTerm, "field"), ("boolean", "isNull"))
+        val Seq(fieldTerm, nullTerm) = newNames("field", "isNull")
 
         val inputCode =
           s"""
-             |$nullTerm = $inputTerm.isNullAt($index);
-             |$fieldTerm = $defaultValue;
+             |boolean $nullTerm = $inputTerm.isNullAt($index);
+             |$resultTypeTerm $fieldTerm = $defaultValue;
              |if (!$nullTerm) {
              |  $fieldTerm = $readCode;
              |}

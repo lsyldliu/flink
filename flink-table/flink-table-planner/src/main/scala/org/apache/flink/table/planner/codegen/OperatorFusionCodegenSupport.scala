@@ -78,19 +78,16 @@ trait OperatorFusionCodegenSupport {
       outputVars
     } else {
       assert(row != null, "outputVars and row can't both be null.")
-      getExprCodeGenerator.generateInputExpression()
+      getExprCodeGenerator.generateInputAccessExprs()
     }
     val rowVar = prepareRowVar(row, outputVars)
 
     // we need to bind out ctx before call its consume to reuse the input expression
     if (inputIdOfOutputNode == 1) {
-      output.getExprCodeGenerator.bindInputWithExpr(
-        output.getOutputType,
-        inputVars,
-        rowVar.resultTerm)
+      output.getExprCodeGenerator.bindInputWithExpr(getOutputType, inputVars, rowVar.resultTerm)
     } else {
       output.getExprCodeGenerator.bindSecondInputWithExpr(
-        output.getOutputType,
+        getOutputType,
         inputVars,
         rowVar.resultTerm)
     }

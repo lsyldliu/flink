@@ -86,19 +86,11 @@ class EqualiserCodeGenerator(fieldTypes: Array[LogicalType], classLoader: ClassL
 
   private def generateEqualsMethod(ctx: CodeGeneratorContext, idx: Int): String = {
     val methodName = getEqualsMethodName(idx)
-    ctx.startNewLocalVariableStatement(methodName)
-
-    val Seq(leftNullTerm, rightNullTerm) = ctx.addReusableLocalVariables(
-      ("boolean", "isNullLeft"),
-      ("boolean", "isNullRight")
-    )
+    val Seq(leftNullTerm, rightNullTerm) = newNames("isNullLeft", "isNullRight")
 
     val fieldType = fieldTypes(idx)
     val fieldTypeTerm = primitiveTypeTermForType(fieldType)
-    val Seq(leftFieldTerm, rightFieldTerm) = ctx.addReusableLocalVariables(
-      (fieldTypeTerm, "leftField"),
-      (fieldTypeTerm, "rightField")
-    )
+    val Seq(leftFieldTerm, rightFieldTerm) = newNames("leftField", "rightField")
 
     val leftReadCode = rowFieldReadAccess(idx, LEFT_INPUT, fieldType)
     val rightReadCode = rowFieldReadAccess(idx, RIGHT_INPUT, fieldType)
@@ -108,10 +100,9 @@ class EqualiserCodeGenerator(fieldTypes: Array[LogicalType], classLoader: ClassL
 
     s"""
        |private boolean $methodName($ROW_DATA $LEFT_INPUT, $ROW_DATA $RIGHT_INPUT) {
-       |  ${ctx.reuseLocalVariableCode(methodName)}
        |
-       |  $leftNullTerm = $LEFT_INPUT.isNullAt($idx);
-       |  $rightNullTerm = $RIGHT_INPUT.isNullAt($idx);
+       |  boolean $leftNullTerm = $LEFT_INPUT.isNullAt($idx);
+       |  boolean $rightNullTerm = $RIGHT_INPUT.isNullAt($idx);
        |  if ($leftNullTerm && $rightNullTerm) {
        |    return true;
        |  }
@@ -120,8 +111,8 @@ class EqualiserCodeGenerator(fieldTypes: Array[LogicalType], classLoader: ClassL
        |    return false;
        |  }
        |
-       |  $leftFieldTerm = $leftReadCode;
-       |  $rightFieldTerm = $rightReadCode;
+       |  $fieldTypeTerm $leftFieldTerm = $leftReadCode;
+       |  $fieldTypeTerm $rightFieldTerm = $rightReadCode;
        |  $equalsCode
        |
        |  return $equalsResult;
