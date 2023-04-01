@@ -45,7 +45,6 @@ class OperatorFusionCodegenInput(
          |new ${className[AbstractInput[_, _]]}(this, $multipleInputId) {
          |  @Override
          |  public void processElement($STREAM_RECORD $ELEMENT) throws Exception {
-         |    ${operatorCtx.reuseLocalVariableCode()}
          |    $inputTypeTerm $inputTerm = ($inputTypeTerm) $ELEMENT.getValue();
          |    ${consumeProcess(multipleCtx, null, inputTerm)}
          |  }

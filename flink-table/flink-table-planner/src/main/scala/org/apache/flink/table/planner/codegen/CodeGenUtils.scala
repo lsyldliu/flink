@@ -513,7 +513,7 @@ object CodeGenUtils {
           // use writer to set field
           val writeField = binaryWriterWriteField(ctx, indexTerm, fieldTerm, writer, fieldType)
           s"""
-             |${fieldExpr.code}
+             |${fieldExpr.getCode}
              |if (${fieldExpr.nullTerm}) {
              |  ${binaryWriterWriteNull(indexTerm, writer, fieldType)};
              |} else {
@@ -526,7 +526,7 @@ object CodeGenUtils {
           val writeField = binaryRowFieldSetAccess(indexTerm, rowTerm, fieldType, fieldTerm)
 
           s"""
-             |${fieldExpr.code}
+             |${fieldExpr.getCode}
              |if (${fieldExpr.nullTerm}) {
              |  ${binaryRowSetNull(indexTerm, rowTerm, fieldType)};
              |} else {
@@ -548,7 +548,7 @@ object CodeGenUtils {
 
       if (fieldType.isNullable) {
         s"""
-           |${fieldExpr.code}
+           |${fieldExpr.getCode}
            |if (${fieldExpr.nullTerm}) {
            |  $setNullField;
            |} else {
@@ -557,7 +557,7 @@ object CodeGenUtils {
           """.stripMargin
       } else {
         s"""
-           |${fieldExpr.code}
+           |${fieldExpr.getCode}
            |$writeField;
          """.stripMargin
       }

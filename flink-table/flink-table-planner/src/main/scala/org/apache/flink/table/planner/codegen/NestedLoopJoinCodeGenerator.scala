@@ -191,7 +191,7 @@ class NestedLoopJoinCodeGenerator(
       s"""
          |${ctx.reusePerRecordCode()}
          |${ctx.reuseInputUnboxingCode(buildRow)}
-         |${condExpr.code}
+         |${condExpr.getCode}
          |if (${condExpr.resultTerm}) {
          |  ${generateCollect(joinedRow(DEFAULT_INPUT1_TERM, DEFAULT_INPUT2_TERM))}
          |
@@ -291,7 +291,7 @@ class NestedLoopJoinCodeGenerator(
          |if ($buildRow != null) {
          |  ${ctx.reusePerRecordCode()}
          |  ${ctx.reuseInputUnboxingCode(buildRow)}
-         |  ${condExpr.code}
+         |  ${condExpr.getCode}
          |  if (${condExpr.resultTerm}) {
          |    $probeMatched = true;
          |  }
@@ -304,7 +304,7 @@ class NestedLoopJoinCodeGenerator(
          |  $BINARY_ROW $buildRow = $iter.getRow();
          |  ${ctx.reusePerRecordCode()}
          |  ${ctx.reuseInputUnboxingCode(buildRow)}
-         |  ${condExpr.code}
+         |  ${condExpr.getCode}
          |  if (${condExpr.resultTerm}) {
          |    $probeMatched = true;
          |    break;

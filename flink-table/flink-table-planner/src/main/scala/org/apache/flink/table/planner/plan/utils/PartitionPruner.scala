@@ -103,7 +103,7 @@ object PartitionPruner {
 
     val filterFunctionBody =
       s"""
-         |${filterExpression.code}
+         |${filterExpression.getCode}
          |return ${filterExpression.resultTerm};
          |""".stripMargin
 

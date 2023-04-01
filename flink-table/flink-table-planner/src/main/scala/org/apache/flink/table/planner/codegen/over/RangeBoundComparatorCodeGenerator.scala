@@ -97,8 +97,8 @@ class RangeBoundComparatorCodeGenerator(
     val comparatorCode =
       j"""
         ${ctx.reuseLocalVariableCode()}
-        ${inputExpr.code}
-        ${currentExpr.code}
+        ${inputExpr.getCode}
+        ${currentExpr.getCode}
         if (${inputExpr.nullTerm} && ${currentExpr.nullTerm}) {
            $allIsNull
         } else if (${inputExpr.nullTerm} || ${currentExpr.nullTerm}) {
@@ -170,7 +170,7 @@ class RangeBoundComparatorCodeGenerator(
        ${ctx.reuseMemberCode()}
        ${ctx.reuseLocalVariableCode()}
        ${ctx.reuseInputUnboxingCode()}
-       ${comExpr.code}
+       ${comExpr.getCode}
        if (${comExpr.resultTerm}) {
          return 1;
        } else {

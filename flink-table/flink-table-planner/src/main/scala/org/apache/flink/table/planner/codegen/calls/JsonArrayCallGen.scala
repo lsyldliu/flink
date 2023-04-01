@@ -72,7 +72,7 @@ class JsonArrayCallGen(call: RexCall) extends CallGenerator {
     val resultTermType = primitiveTypeTermForType(returnType)
     val resultCode =
       s"""
-         |${operands.map(_.code).mkString}
+         |${operands.map(_.getCode).mkString}
          |
          |$nodeTerm.removeAll();
          |$populateNodeCode

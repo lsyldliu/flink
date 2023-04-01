@@ -55,7 +55,7 @@ object ExpandCodeGenerator {
         }
 
         processCodes += header
-        processCodes += projectionResultExpr.code
+        processCodes += projectionResultExpr.getCode
         processCodes += OperatorCodeGenerator.generateCollect(projectionResultExpr.resultTerm)
     }
 

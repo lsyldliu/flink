@@ -97,7 +97,7 @@ object WatermarkGeneratorCodeGenerator {
           ${ctx.reusePerRecordCode()}
           ${ctx.reuseLocalVariableCode()}
           ${ctx.reuseInputUnboxingCode()}
-          ${generatedExpr.code}
+          ${generatedExpr.getCode}
           if (${generatedExpr.nullTerm}) {
             return null;
           } else {

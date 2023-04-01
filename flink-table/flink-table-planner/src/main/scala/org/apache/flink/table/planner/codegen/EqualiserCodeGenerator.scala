@@ -150,7 +150,7 @@ class EqualiserCodeGenerator(fieldTypes: Array[LogicalType], classLoader: ClassL
       val right = GeneratedExpression(rightFieldTerm, rightNullTerm, "", fieldType)
       val resultType = new BooleanType(fieldType.isNullable)
       val gen = generateEquals(ctx, left, right, resultType)
-      (gen.code, gen.resultTerm)
+      (gen.getCode, gen.resultTerm)
     }
   }
 

@@ -62,7 +62,7 @@ abstract class BatchPhysicalJoinBase(
       val nonEquiPredicates = joinInfo.getRemaining(getCluster.getRexBuilder)
       val condition = exprGenerator.generateExpression(nonEquiPredicates)
       s"""
-         |${condition.code}
+         |${condition.getCode}
          |return ${condition.resultTerm};
          |""".stripMargin
     }

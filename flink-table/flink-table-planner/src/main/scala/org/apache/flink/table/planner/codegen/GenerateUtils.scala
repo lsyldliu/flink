@@ -99,7 +99,7 @@ object GenerateUtils {
 
     val resultCode = if (operands.nonEmpty) {
       s"""
-         |${operands.map(_.code).mkString("\n")}
+         |${operands.map(_.getCode).mkString("\n")}
          |boolean $nullTerm = ${operands.map(_.nullTerm).mkString(" || ")};
          |$resultTypeTerm $resultTerm = $defaultValue;
          |if (!$nullTerm) {
@@ -109,7 +109,7 @@ object GenerateUtils {
          |""".stripMargin
     } else {
       s"""
-         |${operands.map(_.code).mkString("\n")}
+         |${operands.map(_.getCode).mkString("\n")}
          |boolean $nullTerm = false;
          |$resultTypeTerm $resultTerm;
          |$wrappedResultAssignment
@@ -180,7 +180,7 @@ object GenerateUtils {
 
     val resultCode = if (resultNullable) {
       s"""
-         |${operands.map(_.code).mkString("\n")}
+         |${operands.map(_.getCode).mkString("\n")}
          |boolean $nullTerm;
          |$resultTypeTerm $resultTerm;
          |$wrappedResultAssignment
@@ -191,7 +191,7 @@ object GenerateUtils {
        """.stripMargin
     } else {
       s"""
-         |${operands.map(_.code).mkString("\n")}
+         |${operands.map(_.getCode).mkString("\n")}
          |boolean $nullTerm;
          |$resultTypeTerm $resultTerm;
          |$wrappedResultAssignment
@@ -508,7 +508,7 @@ object GenerateUtils {
          |$resultTypeTerm $resultTerm = $defaultValue;
          |boolean $nullTerm = true;
          |if ($inputTerm != null) {
-         |  ${fieldAccessExpr.code}
+         |  ${fieldAccessExpr.getCode}
          |  $resultTerm = ${fieldAccessExpr.resultTerm};
          |  $nullTerm = ${fieldAccessExpr.nullTerm};
          |}

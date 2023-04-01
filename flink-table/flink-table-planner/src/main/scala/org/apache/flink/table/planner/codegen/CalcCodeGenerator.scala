@@ -141,7 +141,7 @@ object CalcCodeGenerator {
       val projectionExpression =
         exprGenerator.generateResultExpression(projectionExprs, outRowType, outRowClass)
 
-      val projectionExpressionCode = projectionExpression.code
+      val projectionExpressionCode = projectionExpression.getCode()
 
       val header = if (retainHeader) {
         s"${projectionExpression.resultTerm}.setRowKind($inputTerm.getRowKind());"
@@ -172,7 +172,7 @@ object CalcCodeGenerator {
       if (onlyFilter) {
         s"""
            |${if (eagerInputUnboxingCode) ctx.reuseInputUnboxingCode() else ""}
-           |${filterCondition.code}
+           |${filterCondition.getCode}
            |if (${filterCondition.resultTerm}) {
            |  ${produceOutputCode(inputTerm)}
            |}
@@ -187,11 +187,11 @@ object CalcCodeGenerator {
         val projectionInputCode = ctx.reusableInputUnboxingExprs
           .filter(entry => !filterInputSet.contains(entry._1))
           .values
-          .map(_.code)
+          .map(_.getCode)
           .mkString("\n")
         s"""
            |${if (eagerInputUnboxingCode) filterInputCode else ""}
-           |${filterCondition.code}
+           |${filterCondition.getCode}
            |if (${filterCondition.resultTerm}) {
            |  ${if (eagerInputUnboxingCode) projectionInputCode else ""}
            |  $projectionCode

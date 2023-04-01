@@ -81,7 +81,7 @@ class JsonObjectCallGen(call: RexCall) extends CallGenerator {
     val resultTerm = newName("result")
     val resultTermType = primitiveTypeTermForType(returnType)
     val resultCode = s"""
-                        |${operands.map(_.code).mkString}
+                        |${operands.map(_.getCode).mkString}
                         |
                         |$nodeTerm.removeAll();
                         |$populateNodeCode

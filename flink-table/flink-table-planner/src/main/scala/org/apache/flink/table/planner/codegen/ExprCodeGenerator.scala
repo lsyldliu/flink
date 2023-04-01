@@ -485,7 +485,7 @@ class ExprCodeGenerator(
 
     val resultCode =
       s"""
-         |${refExpr.code}
+         |${refExpr.getCode}
          |$resultTypeTerm $resultTerm;
          |boolean $nullTerm;
          |if (${refExpr.nullTerm}) {
@@ -493,7 +493,7 @@ class ExprCodeGenerator(
          |  $nullTerm = true;
          |}
          |else {
-         |  ${fieldAccessExpr.code}
+         |  ${fieldAccessExpr.getCode}
          |  $resultTerm = ${fieldAccessExpr.resultTerm};
          |  $nullTerm = ${fieldAccessExpr.nullTerm};
          |}
@@ -868,8 +868,8 @@ class ExprCodeGenerator(
         val nullValue = generateNullLiteral(resultType)
         val code =
           s"""
-             |${operands.map(_.code).mkString("\n")}
-             |${nullValue.code}
+             |${operands.map(_.getCode).mkString("\n")}
+             |${nullValue.getCode}
              |org.apache.flink.util.ExceptionUtils.rethrow(
              |  new RuntimeException(${operands.head.resultTerm}.toString()));
              |""".stripMargin

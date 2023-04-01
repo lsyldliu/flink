@@ -150,7 +150,7 @@ object JoinUtil {
     } else {
       val condition = exprGenerator.generateExpression(nonEquiCondition)
       s"""
-         |${condition.code}
+         |${condition.getCode}
          |return ${condition.resultTerm};
          |""".stripMargin
     }

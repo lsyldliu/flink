@@ -81,7 +81,7 @@ object LookupJoinCodeGenerator {
       val resultCollectorTerm = call.resultTerm
       s"""
          |$resultCollectorTerm.setCollector($DEFAULT_COLLECTOR_TERM);
-         |${call.code}
+         |${call.getCode}
          |""".stripMargin
     }
 
@@ -130,7 +130,7 @@ object LookupJoinCodeGenerator {
       asyncLookupFunction,
       functionName,
       fieldCopy = true, // always copy input field because of async buffer
-      _.code
+      _.getCode
     )
   }
 
@@ -319,7 +319,7 @@ object LookupJoinCodeGenerator {
 
     val body =
       s"""
-         |${rightResultExpr.code}
+         |${rightResultExpr.getCode}
          |$joinedRowTerm.replace($inputTerm, ${rightResultExpr.resultTerm});
          |$header
          |outputResult($joinedRowTerm);
@@ -335,7 +335,7 @@ object LookupJoinCodeGenerator {
       val filterCondition = filterGenerator.generateExpression(condition.get)
 
       s"""
-         |${filterCondition.code}
+         |${filterCondition.getCode}
          |if (${filterCondition.resultTerm}) {
          |  $body
          |}
@@ -470,7 +470,7 @@ object LookupJoinCodeGenerator {
          |    ${ctx.reuseLocalVariableCode()}
          |    ${ctx.reuseInputUnboxingCode()}
          |    ${ctx.reusePerRecordCode()}
-         |    ${filterCondition.code}
+         |    ${filterCondition.getCode}
          |    if (${filterCondition.resultTerm}) {
          |      $outTerm.add(record);
          |    }

@@ -72,7 +72,7 @@ object ProjectionCodeGenerator {
     val code =
       s"""
          |$outRowInitCode
-         |${expression.code}
+         |${expression.getCode}
         """.stripMargin
     GeneratedExpression(outRecordTerm, NEVER_NULL, code, outType)
   }
@@ -122,7 +122,7 @@ object ProjectionCodeGenerator {
          |  @Override
          |  public ${outClass.getCanonicalName} apply($ROW_DATA $inputTerm) {
          |    ${ctx.reuseLocalVariableCode()}
-         |    ${expression.code}
+         |    ${expression.getCode}
          |    return ${expression.resultTerm};
          |  }
          |}

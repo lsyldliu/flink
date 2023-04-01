@@ -87,7 +87,7 @@ class ExpressionReducer(
       "ExpressionReducer",
       classOf[MapFunction[GenericRowData, GenericRowData]],
       s"""
-         |${result.code}
+         |${result.getCode}
          |return ${result.resultTerm};
          |""".stripMargin,
       resultType,

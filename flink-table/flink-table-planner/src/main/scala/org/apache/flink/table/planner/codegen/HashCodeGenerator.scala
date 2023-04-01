@@ -220,7 +220,7 @@ object HashCodeGenerator {
           i = i + 1
           s"""
              |$hashIntTerm *= ${HASH_SALT(i & 0x1f)};
-             |${expr.code}
+             |${expr.getCode}
              |if (!${expr.nullTerm}) {
              | $hashIntTerm += ${hashCodeForType(ctx, expr.resultType, expr.resultTerm)};
              |}

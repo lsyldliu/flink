@@ -176,7 +176,7 @@ class MatchCodeGenerator(
     val condition = generateCondition(patternDefinition)
     val body =
       s"""
-         |${condition.code}
+         |${condition.getCode}
          |return ${condition.resultTerm};
          |""".stripMargin
 
@@ -208,7 +208,7 @@ class MatchCodeGenerator(
     val resultExpression = generateOneRowPerMatchExpression(partitionKeys, measures, returnType)
     val body =
       s"""
-         |${resultExpression.code}
+         |${resultExpression.getCode}
          |$collectorTerm.collect(${resultExpression.resultTerm});
          |""".stripMargin
 
@@ -623,7 +623,7 @@ class MatchCodeGenerator(
           val exp: GeneratedExpression = generateAggAccess(aggCall)
           aggregates += aggCall
           reusableAggregationExpr(aggCall.toString) = exp
-          ctx.addReusablePerRecordStatement(exp.code)
+          ctx.addReusablePerRecordStatement(exp.getCode)
           exp.copy(code = NO_CODE)
       }
     }
@@ -789,7 +789,7 @@ class MatchCodeGenerator(
           case (inputExpr, outputIndex) =>
             val expr = generateExpression(inputExpr)
             s"""
-               |  ${expr.code}
+               |  ${expr.getCode}
                |  if (${expr.nullTerm}) {
                |    $resultTerm.setField($outputIndex, null);
                |  } else {

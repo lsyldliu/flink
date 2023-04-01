@@ -90,7 +90,7 @@ object SearchOperatorGen {
 
       val operatorCode =
         s"""
-           |${needle.code}
+           |${needle.getCode}
            |// --- Begin SEARCH ${target.resultTerm}
            |boolean $resultTerm = false;
            |boolean $nullTerm = true;
@@ -128,9 +128,9 @@ object SearchOperatorGen {
       // Add the target expression code
       val finalCode =
         s"""
-           |${target.code}
+           |${target.getCode}
            |// --- Begin SEARCH ${target.resultTerm}
-           |${generatedRangeChecks.code}
+           |${generatedRangeChecks.getCode}
            |// --- End SEARCH ${target.resultTerm}
            |""".stripMargin.trim
       generatedRangeChecks.copy(code = finalCode)

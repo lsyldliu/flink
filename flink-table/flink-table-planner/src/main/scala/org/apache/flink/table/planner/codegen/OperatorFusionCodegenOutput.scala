@@ -48,7 +48,7 @@ class OperatorFusionCodegenOutput(ctx: CodeGeneratorContext) extends OperatorFus
       row: GeneratedExpression): String = {
     addReuseOutElement(ctx)
     s"""
-       |${row.code}
+       |${row.getCode}
        |${generateCollect(row.resultTerm)}
        |""".stripMargin
   }

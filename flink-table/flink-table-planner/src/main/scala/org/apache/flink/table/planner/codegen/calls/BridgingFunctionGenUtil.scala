@@ -168,7 +168,7 @@ object BridgingFunctionGenUtil {
 
     val functionCallCode = if (skipIfArgsNull) {
       s"""
-         |${externalOperands.map(_.code).mkString("\n")}
+         |${externalOperands.map(_.getCode).mkString("\n")}
          |if (${externalOperands.map(_.nullTerm).mkString(" || ")}) {
          |  // skip
          |} else {
@@ -177,7 +177,7 @@ object BridgingFunctionGenUtil {
          |""".stripMargin
     } else {
       s"""
-         |${externalOperands.map(_.code).mkString("\n")}
+         |${externalOperands.map(_.getCode).mkString("\n")}
          |$functionTerm.eval(${externalOperands.map(_.resultTerm).mkString(", ")});
          |""".stripMargin
     }
@@ -195,7 +195,7 @@ object BridgingFunctionGenUtil {
 
     val functionCallCode =
       s"""
-         |${externalOperands.map(_.code).mkString("\n")}
+         |${externalOperands.map(_.getCode).mkString("\n")}
          |if (${externalOperands.map(_.nullTerm).mkString(" || ")}) {
          |  $DEFAULT_COLLECTOR_TERM.complete(java.util.Collections.emptyList());
          |} else {
@@ -231,7 +231,7 @@ object BridgingFunctionGenUtil {
         returnType.asInstanceOf[RowType],
         classOf[GenericRowData])
       s"""
-         |${wrappedResult.code}
+         |${wrappedResult.getCode}
          |outputResult(${wrappedResult.resultTerm});
          |""".stripMargin
     } else {
@@ -279,7 +279,7 @@ object BridgingFunctionGenUtil {
     val externalResultTerm = newName("externalResult")
     val externalCode =
       s"""
-         |${externalOperands.map(_.code).mkString("\n")}
+         |${externalOperands.map(_.getCode).mkString("\n")}
          |$externalResultTypeTerm $externalResultTerm = $externalResultCasting $functionTerm
          |  .$SCALAR_EVAL(${externalOperands.map(_.resultTerm).mkString(", ")});
          |""".stripMargin
@@ -288,7 +288,7 @@ object BridgingFunctionGenUtil {
 
     val copy = internalExpr.copy(code = s"""
                                            |$externalCode
-                                           |${internalExpr.code}
+                                           |${internalExpr.getCode}
                                            |""".stripMargin)
 
     ExternalGeneratedExpression.fromGeneratedExpression(
@@ -598,9 +598,9 @@ object BridgingFunctionGenUtil {
            |
            |  public $externalOutputTypeTerm eval($argsSignatureCode) {
            |    ${ctx.reuseLocalVariableCode()}
-           |    ${argToInternalExprs.map(_.code).mkString("\n")}
+           |    ${argToInternalExprs.map(_.getCode).mkString("\n")}
            |    $argMappingCode
-           |    ${genExpr.code}
+           |    ${genExpr.getCode}
            |    return $externalResultCasting ($resultTerm);
            |  }
            |}

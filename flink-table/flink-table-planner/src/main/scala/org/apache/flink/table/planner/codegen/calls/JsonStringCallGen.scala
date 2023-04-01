@@ -39,7 +39,7 @@ class JsonStringCallGen(call: RexCall) extends CallGenerator {
     val resultTerm = newName("result")
     val resultTermType = primitiveTypeTermForType(returnType)
     val resultCode = s"""
-                        |${operands.map(_.code).mkString}
+                        |${operands.map(_.getCode).mkString}
                         |
                         |$resultTermType $resultTerm = null;
                         |if (!${operands.head.nullTerm}) {

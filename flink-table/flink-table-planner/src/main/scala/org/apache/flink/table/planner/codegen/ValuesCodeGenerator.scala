@@ -52,7 +52,7 @@ object ValuesCodeGenerator {
     val generatedFunction = InputFormatCodeGenerator.generateValuesInputFormat[RowData](
       ctx,
       description,
-      generatedRecords.map(_.code),
+      generatedRecords.map(_.getCode),
       outputType)
 
     new ValuesInputFormat(generatedFunction, InternalTypeInfo.of(outputType))

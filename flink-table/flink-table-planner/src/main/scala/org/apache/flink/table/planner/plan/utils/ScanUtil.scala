@@ -105,7 +105,7 @@ object ScanUtil {
 
         s"""
            |$beforeConvert
-           |${conversion.code}
+           |${conversion.getCode}
            |${generateCollect(conversion.resultTerm)}
            |$afterConvert
            |""".stripMargin

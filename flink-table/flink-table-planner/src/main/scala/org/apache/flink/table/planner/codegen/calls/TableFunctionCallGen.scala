@@ -68,7 +68,7 @@ class TableFunctionCallGen(rexCall: RexCall, tableFunction: TableFunction[_])
     val parameters = prepareUDFArgs(ctx, operands, tableFunction)
     val functionCallCode =
       s"""
-         |${parameters.map(_.code).mkString("\n")}
+         |${parameters.map(_.getCode).mkString("\n")}
          |$functionReference.eval(${parameters.map(_.resultTerm).mkString(", ")});
          |""".stripMargin
 
@@ -125,7 +125,7 @@ class TableFunctionCallGen(rexCall: RexCall, tableFunction: TableFunction[_])
         wrappedInternalType,
         classOf[GenericRowData])
       s"""
-         |${wrappedResult.code}
+         |${wrappedResult.getCode}
          |outputResult(${wrappedResult.resultTerm});
          |""".stripMargin
     } else {

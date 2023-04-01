@@ -110,7 +110,7 @@ class OperatorFusionCodegenHashJoin(
         s"""
            |$nullCheckBuildCode
            |if (!$nullCheckBuildTerm) {
-           |  ${row.code}
+           |  ${row.getCode}
            |  $hashTableTerm.putBuildRow(${row.resultTerm});
            |}
        """.stripMargin
@@ -125,9 +125,8 @@ class OperatorFusionCodegenHashJoin(
         val joinCode = hashJoinType match {
           case HashJoinType.INNER =>
             s"""
-               |// need to wrap the ctx.reuseLocalVariableCode code
                |// generate join key for probe side
-               |${keyEv.code}
+               |${keyEv.getCode}
                |// find matches from hash table
                |${classOf[RowIterator[_]].getCanonicalName} $buildIterTerm = $anyNull ?
                |  null : $hashTableTerm.get(${keyEv.resultTerm});
@@ -158,9 +157,8 @@ class OperatorFusionCodegenHashJoin(
         val joinCode = hashJoinType match {
           case HashJoinType.INNER =>
             s"""
-               |// need to wrap the ctx.reuseLocalVariableCode code
                |// generate join key for probe side
-               |${keyEv.code}
+               |${keyEv.getCode}
                |// find matches from hash table
                |${classOf[RowIterator[_]].getCanonicalName} $buildIterTerm = $anyNull ?
                |  null : $hashTableTerm.get(${keyEv.resultTerm});
@@ -187,7 +185,7 @@ class OperatorFusionCodegenHashJoin(
         s"""
            |$nullCheckBuildCode
            |if (!$nullCheckBuildTerm) {
-           |  ${row.code}
+           |  ${row.getCode}
            |  $hashTableTerm.putBuildRow(${row.resultTerm});
            |}
        """.stripMargin
@@ -276,10 +274,9 @@ class OperatorFusionCodegenHashJoin(
     val codeBuilder = new StringBuilder
     val anyNullTerm = newName("anyNull")
 
-    // the result compute id no need, we should remove it from the code
     keyMapping.foreach(
       key => {
-        codeBuilder.append(input(key).code + "\n")
+        codeBuilder.append(input(key).getCode + "\n")
         builder.append(s"$anyNullTerm |= ${input(key).nullTerm};")
       })
     (
@@ -298,7 +295,7 @@ class OperatorFusionCodegenHashJoin(
       val expr = exprCodeGenerator.generateExpression(joinSpec.getNonEquiCondition.get)
       val skipRow = s"${expr.nullTerm} || !${expr.resultTerm}"
       s"""
-         |${expr.code}
+         |${expr.getCode}
          |if (!($skipRow))
        """.stripMargin
     } else {

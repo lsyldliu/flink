@@ -92,7 +92,7 @@ class ScalarFunctionCallGen(scalarFunction: ScalarFunction) extends CallGenerato
 
     val functionCallCode =
       s"""
-         |${parameters.map(_.code).mkString("\n")}
+         |${parameters.map(_.getCode).mkString("\n")}
          |$resultTypeTerm $resultTerm;
          |$setResult
          |""".stripMargin
@@ -105,7 +105,7 @@ class ScalarFunctionCallGen(scalarFunction: ScalarFunction) extends CallGenerato
     }
     resultUnboxing.copy(code = s"""
                                   |$functionCallCode
-                                  |${resultUnboxing.code}
+                                  |${resultUnboxing.getCode}
                                   |""".stripMargin)
   }
 

@@ -18,6 +18,7 @@
 package org.apache.flink.table.planner.codegen
 
 import org.apache.flink.table.planner.codegen.CodeGenUtils.{boxedTypeTermForType, newName}
+import org.apache.flink.table.planner.codegen.GeneratedExpression.NO_CODE
 import org.apache.flink.table.runtime.typeutils.TypeCheckUtils
 import org.apache.flink.table.types.logical.LogicalType
 
@@ -105,6 +106,23 @@ case class GeneratedExpression(
       GeneratedExpression(newResultTerm, nullTerm, newCode, resultType, literalValue)
     } else {
       this
+    }
+  }
+
+  def getCode(): String = {
+    codeUsed match {
+      // if the code has been wrapped into generated code block, doesn't evaluate it again
+      case true => ""
+      case false =>
+        codeUsed = true
+        code
+    }
+  }
+
+  def copyExpr(): GeneratedExpression = {
+    codeUsed match {
+      case true => new GeneratedExpression(resultTerm, nullTerm, NO_CODE, resultType, literalValue)
+      case false => new GeneratedExpression(resultTerm, nullTerm, code, resultType, literalValue)
     }
   }
 }

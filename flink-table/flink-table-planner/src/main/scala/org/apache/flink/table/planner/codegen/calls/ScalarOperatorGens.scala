@@ -391,8 +391,8 @@ object ScalarOperatorGens {
       val ser = s"$genericSer.getInnerSerializer()"
       val code =
         s"""
-           |${left.code}
-           |${right.code}
+           |${left.getCode}
+           |${right.getCode}
            |boolean $nullTerm = ${left.nullTerm} || ${right.nullTerm};
            |boolean $resultTerm = ${primitiveDefaultValue(resultType)};
            |if (!$nullTerm) {
@@ -501,7 +501,7 @@ object ScalarOperatorGens {
       GeneratedExpression(
         s"(!${equalsExpr.resultTerm})",
         equalsExpr.nullTerm,
-        equalsExpr.code,
+        equalsExpr.getCode,
         resultType)
     }
     // map types
@@ -510,7 +510,7 @@ object ScalarOperatorGens {
       GeneratedExpression(
         s"(!${equalsExpr.resultTerm})",
         equalsExpr.nullTerm,
-        equalsExpr.code,
+        equalsExpr.getCode,
         resultType)
     }
     // comparable types
@@ -610,17 +610,17 @@ object ScalarOperatorGens {
 
   def generateIsNull(operand: GeneratedExpression, resultType: LogicalType): GeneratedExpression = {
     if (operand.resultType.isNullable) {
-      GeneratedExpression(operand.nullTerm, NEVER_NULL, operand.code, resultType)
+      GeneratedExpression(operand.nullTerm, NEVER_NULL, operand.getCode, resultType)
     } else if (isReference(operand.resultType)) {
       val resultTerm = newName("isNull")
       val operatorCode =
         s"""
-           |${operand.code}
+           |${operand.getCode}
            |boolean $resultTerm = ${operand.resultTerm} == null;
            |""".stripMargin
       GeneratedExpression(resultTerm, NEVER_NULL, operatorCode, resultType)
     } else {
-      GeneratedExpression("false", NEVER_NULL, operand.code, resultType)
+      GeneratedExpression("false", NEVER_NULL, operand.getCode, resultType)
     }
   }
 
@@ -631,7 +631,7 @@ object ScalarOperatorGens {
       val resultTerm = newName("result")
       val operatorCode =
         s"""
-           |${operand.code}
+           |${operand.getCode}
            |boolean $resultTerm = !${operand.nullTerm};
            |""".stripMargin.trim
       GeneratedExpression(resultTerm, NEVER_NULL, operatorCode, resultType)
@@ -639,12 +639,12 @@ object ScalarOperatorGens {
       val resultTerm = newName("result")
       val operatorCode =
         s"""
-           |${operand.code}
+           |${operand.getCode}
            |boolean $resultTerm = ${operand.resultTerm} != null;
            |""".stripMargin.trim
       GeneratedExpression(resultTerm, NEVER_NULL, operatorCode, resultType)
     } else {
-      GeneratedExpression("true", NEVER_NULL, operand.code, resultType)
+      GeneratedExpression("true", NEVER_NULL, operand.getCode, resultType)
     }
   }
 
@@ -663,14 +663,14 @@ object ScalarOperatorGens {
       // Unknown && False -> False
       // Unknown && Unknown -> Unknown
       s"""
-         |${left.code}
+         |${left.getCode}
          |
          |boolean $resultTerm = false;
          |boolean $nullTerm = false;
          |if (!${left.nullTerm} && !${left.resultTerm}) {
          |  // left expr is false, skip right expr
          |} else {
-         |  ${right.code}
+         |  ${right.getCode}
          |
          |  if (!${left.nullTerm} && !${right.nullTerm}) {
          |    $resultTerm = ${left.resultTerm} && ${right.resultTerm};
@@ -717,14 +717,14 @@ object ScalarOperatorGens {
       // Unknown || False -> Unknown
       // Unknown || Unknown -> Unknown
       s"""
-         |${left.code}
+         |${left.getCode}
          |
          |boolean $resultTerm = true;
          |boolean $nullTerm = false;
          |if (!${left.nullTerm} && ${left.resultTerm}) {
          |  // left expr is true, skip right expr
          |} else {
-         |  ${right.code}
+         |  ${right.getCode}
          |
          |  if (!${left.nullTerm} && !${right.nullTerm}) {
          |    $resultTerm = ${left.resultTerm} || ${right.resultTerm};
@@ -770,7 +770,7 @@ object ScalarOperatorGens {
     GeneratedExpression(
       operand.resultTerm, // unknown is always false by default
       GeneratedExpression.NEVER_NULL,
-      operand.code,
+      operand.getCode,
       resultType)
   }
 
@@ -780,7 +780,7 @@ object ScalarOperatorGens {
     GeneratedExpression(
       s"(!${operand.resultTerm})", // unknown is always false by default
       GeneratedExpression.NEVER_NULL,
-      operand.code,
+      operand.getCode,
       resultType)
   }
 
@@ -790,7 +790,7 @@ object ScalarOperatorGens {
     GeneratedExpression(
       s"(!${operand.resultTerm} && !${operand.nullTerm})",
       GeneratedExpression.NEVER_NULL,
-      operand.code,
+      operand.getCode,
       resultType)
   }
 
@@ -800,7 +800,7 @@ object ScalarOperatorGens {
     GeneratedExpression(
       s"(${operand.resultTerm} || ${operand.nullTerm})",
       GeneratedExpression.NEVER_NULL,
-      operand.code,
+      operand.getCode,
       resultType)
   }
 
@@ -901,7 +901,7 @@ object ScalarOperatorGens {
           return GeneratedExpression(
             resultTerm,
             nullTerm,
-            operand.code + "\n" + castCode,
+            operand.getCode + "\n" + castCode,
             targetType
           )
         } else {
@@ -915,7 +915,7 @@ object ScalarOperatorGens {
           return GeneratedExpression(
             castCodeBlock.getReturnTerm,
             castCodeBlock.getIsNullTerm,
-            operand.code + castCode,
+            operand.getCode + castCode,
             targetType
           )
         }
@@ -966,18 +966,18 @@ object ScalarOperatorGens {
 
       val operatorCode =
         s"""
-           |${condition.code}
+           |${condition.getCode}
            |$resultTypeTerm $resultTerm = $defaultValue;
            |boolean $nullTerm;
            |if (${condition.resultTerm}) {
-           |  ${trueAction.code}
+           |  ${trueAction.getCode}
            |  $nullTerm = ${trueAction.nullTerm};
            |  if (!$nullTerm) {
            |    $resultTerm = ${trueAction.resultTerm};
            |  }
            |}
            |else {
-           |  ${falseAction.code}
+           |  ${falseAction.getCode}
            |  $nullTerm = ${falseAction.nullTerm};
            |  if (!$nullTerm) {
            |    $resultTerm = ${falseAction.resultTerm};
@@ -1017,7 +1017,7 @@ object ScalarOperatorGens {
 
     val resultCode =
       s"""
-         |${operands.map(_.code).mkString("\n")}
+         |${operands.map(_.getCode).mkString("\n")}
          |$resultTypeTerm $resultTerm;
          |boolean $nullTerm;
          |if (${operands.map(_.nullTerm).mkString(" || ")}) {
@@ -1025,7 +1025,7 @@ object ScalarOperatorGens {
          |  $nullTerm = true;
          |}
          |else {
-         |  ${access.code}
+         |  ${access.getCode}
          |  $resultTerm = ${access.resultTerm};
          |  $nullTerm = ${access.nullTerm};
          |}
@@ -1076,7 +1076,7 @@ object ScalarOperatorGens {
                 ""
               } else if (tpe.isNullable) {
                 s"""
-                   |${element.code}
+                   |${element.getCode}
                    |if (${element.nullTerm}) {
                    |  ${binaryRowSetNull(idx, row.resultTerm, tpe)};
                    |} else {
@@ -1085,7 +1085,7 @@ object ScalarOperatorGens {
            """.stripMargin
               } else {
                 s"""
-                   |${element.code}
+                   |${element.getCode}
                    |${binaryRowFieldSetAccess(idx, row.resultTerm, tpe, element.resultTerm)};
            """.stripMargin
               }
@@ -1105,7 +1105,7 @@ object ScalarOperatorGens {
       elements: Seq[GeneratedExpression]): GeneratedExpression = {
     checkArgument(elements.forall(e => e.literal))
     val expr = generateNonLiteralRow(ctx, rowType, elements)
-    ctx.addReusableInitStatement(expr.code)
+    ctx.addReusableInitStatement(expr.getCode)
     GeneratedExpression(expr.resultTerm, GeneratedExpression.NEVER_NULL, NO_CODE, rowType)
   }
 
@@ -1125,7 +1125,7 @@ object ScalarOperatorGens {
           val tpe = fieldTypes(idx)
           if (tpe.isNullable) {
             s"""
-               |${element.code}
+               |${element.getCode}
                |if (${element.nullTerm}) {
                |  ${binaryWriterWriteNull(idx, writerTerm, tpe)};
                |} else {
@@ -1134,7 +1134,7 @@ object ScalarOperatorGens {
            """.stripMargin
           } else {
             s"""
-               |${element.code}
+               |${element.getCode}
                |${binaryWriterWriteField(ctx, idx, element.resultTerm, writerTerm, tpe)};
            """.stripMargin
           }
@@ -1200,7 +1200,7 @@ object ScalarOperatorGens {
             ""
           } else if (elementType.isNullable) {
             s"""
-               |${element.code}
+               |${element.getCode}
                |if (${element.nullTerm}) {
                |  ${binaryArraySetNull(idx, arrayTerm, elementType)};
                |} else {
@@ -1209,7 +1209,7 @@ object ScalarOperatorGens {
              """.stripMargin
           } else {
             s"""
-               |${element.code}
+               |${element.getCode}
                |${binaryRowFieldSetAccess(idx, arrayTerm, elementType, element.resultTerm)};
              """.stripMargin
           }
@@ -1223,7 +1223,7 @@ object ScalarOperatorGens {
       elements: Seq[GeneratedExpression]): GeneratedExpression = {
     checkArgument(elements.forall(e => e.literal))
     val expr = generateNonLiteralArray(ctx, arrayType, elements)
-    ctx.addReusableInitStatement(expr.code)
+    ctx.addReusableInitStatement(expr.getCode)
     GeneratedExpression(expr.resultTerm, GeneratedExpression.NEVER_NULL, NO_CODE, arrayType)
   }
 
@@ -1242,7 +1242,7 @@ object ScalarOperatorGens {
       .map {
         case (element, idx) =>
           s"""
-             |${element.code}
+             |${element.getCode}
              |if (${element.nullTerm}) {
              |  ${binaryArraySetNull(idx, writerTerm, elementType)};
              |} else {
@@ -1295,8 +1295,8 @@ object ScalarOperatorGens {
 
     val arrayAccessCode =
       s"""
-         |${array.code}
-         |${index.code}
+         |${array.getCode}
+         |${index.getCode}
          |boolean $nullTerm = ${array.nullTerm} || ${index.nullTerm} ||
          |   $idxStr < 0 || $idxStr >= ${array.resultTerm}.size() || $arrayIsNull;
          |$resultTypeTerm $resultTerm = $nullTerm ? $defaultTerm : $arrayGet;
@@ -1315,7 +1315,7 @@ object ScalarOperatorGens {
     val arrayGet = rowFieldReadAccess(0, array.resultTerm, resultType)
     val arrayAccessCode =
       s"""
-         |${array.code}
+         |${array.getCode}
          |boolean $nullTerm;
          |$resultTypeTerm $resultTerm;
          |switch ($arrayLengthCode) {
@@ -1369,7 +1369,7 @@ object ScalarOperatorGens {
       .map {
         element =>
           s"""
-             | ${element.code}
+             | ${element.getCode}
              | if (!$nullTerm) {
              |   $boxedResultTypeTerm $cur = ${castIfNumeric(element)};
              |   if (${element.nullTerm}) {
@@ -1458,8 +1458,8 @@ object ScalarOperatorGens {
     } else {
       // the key or value is not fixed length, re-create the map on every update
       s"""
-         |${keyExpr.code}
-         |${valueExpr.code}
+         |${keyExpr.getCode}
+         |${valueExpr.getCode}
          |$baseMap = $BINARY_MAP.valueOf(${keyExpr.resultTerm}, ${valueExpr.resultTerm});
        """.stripMargin
     }
@@ -1523,7 +1523,7 @@ object ScalarOperatorGens {
          |  } else {
          |    while ($index < $length && !$found) {
          |      final $keyTypeTerm $tmpKey = ${rowFieldReadAccess(index, keys, keyType)};
-         |      ${equal.code}
+         |      ${equal.getCode}
          |      if (${equal.resultTerm}) {
          |        $found = true;
          |      } else {
@@ -1551,8 +1551,8 @@ object ScalarOperatorGens {
 
     val accessCode =
       s"""
-         |${map.code}
-         |${key.code}
+         |${map.getCode}
+         |${key.getCode}
          |boolean $nullTerm = (${map.nullTerm} || ${key.nullTerm});
          |$valueTypeTerm $resultTerm = $valueDefault;
          |if (!$nullTerm) {
@@ -1671,7 +1671,7 @@ object ScalarOperatorGens {
              |          ${rowFieldReadAccess(indexTerm, rightTerm, elementType)};
              |      }
              |
-             |      ${elementEqualsExpr.code}
+             |      ${elementEqualsExpr.getCode}
              |      if (!${elementEqualsExpr.resultTerm}) {
              |        $resultTerm = false;
              |        break;
@@ -1745,7 +1745,7 @@ object ScalarOperatorGens {
              |      boolean $leftValueNullTerm = ($leftValueTerm == null);
              |      boolean $rightValueNullTerm = ($rightValueTerm == null);
              |
-             |      ${valueEqualsExpr.code}
+             |      ${valueEqualsExpr.getCode}
              |      if (!${valueEqualsExpr.resultTerm}) {
              |        $resultTerm = false;
              |        break;

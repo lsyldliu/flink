@@ -75,26 +75,17 @@ class OperatorFusionCodegenCalc(
       // only filter
       if (onlyFilter) {
         s"""
-           |${filterCondition.code}
+           |${filterCondition.getCode}
            |if (${filterCondition.resultTerm}) {
            |  ${consumeProcess(multipleCtx, input)}
            |}
            |""".stripMargin
       } else { // both filter and projection
-        val filterInputCode = operatorCtx.reuseInputUnboxingCode()
-        val filterInputSet = Set(operatorCtx.reusableInputUnboxingExprs.keySet.toSeq: _*)
-
         // if any filter conditions, projection code will enter an new scope
         // TODO filter 已经计算过的表达式，参考spark，在project中无需再重复计算，因此需要把其input表达式code置为空，不然会存在变量重复定义问题
         val projectionExprs = projection.map(getExprCodeGenerator.generateExpression)
-
-        val projectionInputCode = operatorCtx.reusableInputUnboxingExprs
-          .filter(entry => !filterInputSet.contains(entry._1))
-          .values
-          .map(_.code)
-          .mkString("\n")
         s"""
-           |${filterCondition.code}
+           |${filterCondition.getCode}
            |if (${filterCondition.resultTerm}) {
            |  ${consumeProcess(multipleCtx, projectionExprs)}
            |}

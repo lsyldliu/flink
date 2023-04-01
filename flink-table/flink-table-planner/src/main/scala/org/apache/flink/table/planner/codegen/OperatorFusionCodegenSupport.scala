@@ -127,11 +127,30 @@ trait OperatorFusionCodegenSupport {
       new GeneratedExpression(row, NEVER_NULL, NO_CODE, getOutputType)
     } else {
       getExprCodeGenerator.generateResultExpression(
-        colVars,
+        // need copy the colVars first to avoid it code is used during generate row
+        colVars.map(_.copyExpr),
         getOutputType,
         classOf[BinaryRowData],
         newName(variablePrefix + DEFAULT_OUT_RECORD_TERM),
         Some(newName(variablePrefix + DEFAULT_OUT_RECORD_WRITER_TERM))
+      )
+    }
+  }
+
+  def prepareInputRowVar(
+      inputId: Int,
+      row: String,
+      colVars: Seq[GeneratedExpression]): GeneratedExpression = {
+    val inputOp = inputs(inputId)
+    if (row != null) {
+      new GeneratedExpression(row, NEVER_NULL, NO_CODE, inputOp.getOutputType)
+    } else {
+      inputOp.getExprCodeGenerator.generateResultExpression(
+        colVars,
+        inputOp.getOutputType,
+        classOf[BinaryRowData],
+        newName(variablePrefix + "input"),
+        Some(newName(variablePrefix + "inputWriter"))
       )
     }
   }

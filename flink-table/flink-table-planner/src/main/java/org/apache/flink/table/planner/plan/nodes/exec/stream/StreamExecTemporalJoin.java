@@ -241,7 +241,7 @@ public class StreamExecTemporalJoin extends ExecNodeBase<RowData>
         if (joinSpec.getNonEquiCondition().isPresent()) {
             final GeneratedExpression condition =
                     exprGenerator.generateExpression(joinSpec.getNonEquiCondition().get());
-            body = String.format("%s\nreturn %s;", condition.code(), condition.resultTerm());
+            body = String.format("%s\nreturn %s;", condition.getCode(), condition.resultTerm());
         }
 
         GeneratedJoinCondition generatedJoinCondition =
