@@ -598,10 +598,7 @@ object GenerateUtils {
         val inputCode =
           s"""
              |boolean $nullTerm = $inputTerm.isNullAt($index);
-             |$resultTypeTerm $fieldTerm = $defaultValue;
-             |if (!$nullTerm) {
-             |  $fieldTerm = $readCode;
-             |}
+             |$resultTypeTerm $fieldTerm = $nullTerm ? $defaultValue : ($readCode);
            """.stripMargin.trim
 
         GeneratedExpression(fieldTerm, nullTerm, inputCode, fieldType)
