@@ -47,9 +47,10 @@ class OperatorFusionCodegenOutput(ctx: CodeGeneratorContext) extends OperatorFus
       input: Seq[GeneratedExpression],
       row: GeneratedExpression): String = {
     addReuseOutElement(ctx)
+    val inputRow = prepareInputRowVar(1, row.resultTerm, input)
     s"""
-       |${row.getCode}
-       |${generateCollect(row.resultTerm)}
+       |${inputRow.getCode}
+       |${generateCollect(inputRow.resultTerm)}
        |""".stripMargin
   }
 

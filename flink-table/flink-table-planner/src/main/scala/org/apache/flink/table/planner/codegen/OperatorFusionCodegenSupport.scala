@@ -80,16 +80,20 @@ trait OperatorFusionCodegenSupport {
       assert(row != null, "outputVars and row can't both be null.")
       getExprCodeGenerator.generateInputAccessExprs()
     }
-    val rowVar = prepareRowVar(row, outputVars)
+    val rowVar = new GeneratedExpression(row, NEVER_NULL, NO_CODE, getOutputType)
 
     // we need to bind out ctx before call its consume to reuse the input expression
-    if (inputIdOfOutputNode == 1) {
-      output.getExprCodeGenerator.bindInputWithExpr(getOutputType, inputVars, rowVar.resultTerm)
+    val rowTerm: String = if (row != null) {
+      row
     } else {
-      output.getExprCodeGenerator.bindSecondInputWithExpr(
-        getOutputType,
-        inputVars,
-        rowVar.resultTerm)
+      newName(variablePrefix + DEFAULT_OUT_RECORD_TERM)
+    }
+
+    // this is used to generate inputVars when outputVars is null
+    if (inputIdOfOutputNode == 1) {
+      output.getExprCodeGenerator.bindInputWithExpr(getOutputType, inputVars, rowTerm)
+    } else {
+      output.getExprCodeGenerator.bindSecondInputWithExpr(getOutputType, inputVars, rowTerm)
     }
 
     // we always pass column vars and row var to parent simultaneously, the parent decide to use which one
@@ -141,7 +145,7 @@ trait OperatorFusionCodegenSupport {
       inputId: Int,
       row: String,
       colVars: Seq[GeneratedExpression]): GeneratedExpression = {
-    val inputOp = inputs(inputId)
+    val inputOp = inputs(inputId - 1)
     if (row != null) {
       new GeneratedExpression(row, NEVER_NULL, NO_CODE, inputOp.getOutputType)
     } else {
