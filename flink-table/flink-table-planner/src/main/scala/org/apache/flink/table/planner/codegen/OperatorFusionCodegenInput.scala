@@ -46,7 +46,7 @@ class OperatorFusionCodegenInput(
          |  @Override
          |  public void processElement($STREAM_RECORD $ELEMENT) throws Exception {
          |    $inputTypeTerm $inputTerm = ($inputTypeTerm) $ELEMENT.getValue();
-         |    ${consumeProcess(multipleCtx, null, inputTerm)}
+         |    ${consumeProcess(null, inputTerm)}
          |  }
          |}
          |""".stripMargin)
@@ -55,7 +55,7 @@ class OperatorFusionCodegenInput(
   override def doProduceEndInput(multipleCtx: CodeGeneratorContext): Unit = {
     multipleCtx.addReusableMultipleEndInputStatement(s"""
                                                         |case $multipleInputId:
-                                                        |  ${consumeEndInput(multipleCtx)}
+                                                        |  ${consumeEndInput()}
                                                         |  break;
                                                         |""".stripMargin)
   }

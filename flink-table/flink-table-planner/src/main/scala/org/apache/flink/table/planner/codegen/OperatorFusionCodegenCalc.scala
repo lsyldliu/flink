@@ -51,7 +51,6 @@ class OperatorFusionCodegenCalc(
   }
 
   override def doConsumeProcess(
-      multipleCtx: CodeGeneratorContext,
       inputId: Int,
       input: Seq[GeneratedExpression],
       row: GeneratedExpression): String = {
@@ -68,7 +67,7 @@ class OperatorFusionCodegenCalc(
     } else if (condition.isEmpty) { // only projection
       val projectionExprs = projection.map(getExprCodeGenerator.generateExpression)
       s"""
-         |${consumeProcess(multipleCtx, projectionExprs)}
+         |${consumeProcess(projectionExprs)}
          |""".stripMargin
     } else {
       val filterCondition = getExprCodeGenerator.generateExpression(condition.get)
@@ -77,7 +76,7 @@ class OperatorFusionCodegenCalc(
         s"""
            |${filterCondition.getCode}
            |if (${filterCondition.resultTerm}) {
-           |  ${consumeProcess(multipleCtx, input)}
+           |  ${consumeProcess(input)}
            |}
            |""".stripMargin
       } else { // both filter and projection
@@ -87,7 +86,7 @@ class OperatorFusionCodegenCalc(
         s"""
            |${filterCondition.getCode}
            |if (${filterCondition.resultTerm}) {
-           |  ${consumeProcess(multipleCtx, projectionExprs)}
+           |  ${consumeProcess(projectionExprs)}
            |}
            |""".stripMargin
       }

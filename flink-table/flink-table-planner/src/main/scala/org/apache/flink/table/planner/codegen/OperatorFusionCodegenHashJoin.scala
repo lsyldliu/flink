@@ -109,7 +109,6 @@ class OperatorFusionCodegenHashJoin(
   }
 
   override def doConsumeProcess(
-      multipleCtx: CodeGeneratorContext,
       inputId: Int,
       input: Seq[GeneratedExpression],
       row: GeneratedExpression): String = {
@@ -120,7 +119,7 @@ class OperatorFusionCodegenHashJoin(
       } else {
         hashJoinType match {
           case HashJoinType.INNER =>
-            codegenInnerProbe(multipleCtx, input)
+            codegenInnerProbe(input)
           case _ =>
             throw new UnsupportedOperationException(
               s"Multiple fusion codegen doesn't support $hashJoinType now.")
@@ -130,7 +129,7 @@ class OperatorFusionCodegenHashJoin(
       if (inputId == 1) {
         hashJoinType match {
           case HashJoinType.INNER =>
-            codegenInnerProbe(multipleCtx, input)
+            codegenInnerProbe(input)
           case _ =>
             throw new UnsupportedOperationException(
               s"Multiple fusion codegen doesn't support $hashJoinType now.")
@@ -154,9 +153,7 @@ class OperatorFusionCodegenHashJoin(
        """.stripMargin
   }
 
-  private def codegenInnerProbe(
-      multipleCtx: CodeGeneratorContext,
-      input: Seq[GeneratedExpression]): String = {
+  private def codegenInnerProbe(input: Seq[GeneratedExpression]): String = {
     val (keyEv, anyNull) = genStreamSideJoinKey(keyType, probeKeys, input)
     val keyCode = keyEv.getCode
     val (matched, checkCondition, buildVars) = getJoinCondition(buildType)
@@ -173,14 +170,14 @@ class OperatorFusionCodegenHashJoin(
        |  while ($buildIterTerm.advanceNext()) {
        |    $ROW_DATA $matched = $buildIterTerm.getRow();
        |    $checkCondition {
-       |      ${consumeProcess(multipleCtx, resultVars)}
+       |      ${consumeProcess(resultVars)}
        |    }
        |  }
        |}
            """.stripMargin
   }
 
-  override def doConsumeEndInput(multipleCtx: CodeGeneratorContext, inputId: Int): String = {
+  override def doConsumeEndInput(inputId: Int): String = {
     // If the hash table spill to disk during runtime, the probe endInput also need to
     // consumeProcess to consume the spilled record
     if (leftIsBuild) {
@@ -191,11 +188,11 @@ class OperatorFusionCodegenHashJoin(
        """.stripMargin
       } else {
         // TODO support spill disk of hash table
-        consumeEndInput(multipleCtx)
+        consumeEndInput()
       }
     } else {
       if (inputId == 1) {
-        consumeEndInput(multipleCtx)
+        consumeEndInput()
       } else {
         s"""
            |LOG.info("Finish build phase.");

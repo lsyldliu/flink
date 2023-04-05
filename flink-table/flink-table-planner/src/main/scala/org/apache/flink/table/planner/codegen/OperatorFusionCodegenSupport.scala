@@ -117,10 +117,7 @@ trait OperatorFusionCodegenSupport {
 
   protected def doProduceProcess(multipleCtx: CodeGeneratorContext): Unit
 
-  final def consumeProcess(
-      multipleCtx: CodeGeneratorContext,
-      outputVars: Seq[GeneratedExpression],
-      row: String = null): String = {
+  final def consumeProcess(outputVars: Seq[GeneratedExpression], row: String = null): String = {
     val inputVars = if (outputVars != null) {
       assert(outputVars.length == getOutputType.getFieldCount)
       outputVars
@@ -142,12 +139,11 @@ trait OperatorFusionCodegenSupport {
 
     // we always pass column vars and row var to parent simultaneously, the output decide to use which one
     s"""
-       |${output.doConsumeProcess(multipleCtx, inputIdOfOutputNode, inputVars, rowVar)}
+       |${output.doConsumeProcess(inputIdOfOutputNode, inputVars, rowVar)}
      """.stripMargin
   }
 
   def doConsumeProcess(
-      multipleCtx: CodeGeneratorContext,
       inputId: Int,
       input: Seq[GeneratedExpression],
       row: GeneratedExpression): String = {
@@ -160,14 +156,14 @@ trait OperatorFusionCodegenSupport {
 
   protected def doProduceEndInput(multipleCtx: CodeGeneratorContext): Unit
 
-  final def consumeEndInput(multipleCtx: CodeGeneratorContext): String = {
+  final def consumeEndInput(): String = {
     s"""
-       |${output.doConsumeEndInput(multipleCtx, inputIdOfOutputNode)}
+       |${output.doConsumeEndInput(inputIdOfOutputNode)}
      """.stripMargin
   }
 
-  def doConsumeEndInput(multipleCtx: CodeGeneratorContext, inputId: Int): String = {
-    consumeEndInput(multipleCtx)
+  def doConsumeEndInput(inputId: Int): String = {
+    consumeEndInput()
   }
 
   private def prepareRowVar(row: String, colVars: Seq[GeneratedExpression]): GeneratedExpression = {

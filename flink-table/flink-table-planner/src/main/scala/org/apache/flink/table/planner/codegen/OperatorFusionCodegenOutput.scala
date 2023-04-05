@@ -52,7 +52,6 @@ class OperatorFusionCodegenOutput(operatorCtx: CodeGeneratorContext)
   }
 
   override def doConsumeProcess(
-      multipleCtx: CodeGeneratorContext,
       inputId: Int,
       input: Seq[GeneratedExpression],
       row: GeneratedExpression): String = {
@@ -63,7 +62,7 @@ class OperatorFusionCodegenOutput(operatorCtx: CodeGeneratorContext)
        |""".stripMargin
   }
 
-  override def doConsumeEndInput(multipleCtx: CodeGeneratorContext, inputId: Int): String = ""
+  override def doConsumeEndInput(inputId: Int): String = ""
 
   def generateMultipleOperator(
       inputSpecs: util.List[MultipleInputSpec]): (OperatorFusionCodegenFactory[RowData], Long) = {
