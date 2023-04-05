@@ -542,11 +542,11 @@ public class ExecutionConfigOptions {
                                     + "In Flink 1.15.x the pattern was wrongly defined as '<id>_<type>_<version>_<transformation>' "
                                     + "which would prevent migrations in the future.");
 
-    public static final ConfigOption<Boolean> TABLE_EXEC_MULTIPLE_INPUT_BHJ =
-            key("table.exec.multiple-input-bhj")
+    public static final ConfigOption<Boolean> TABLE_EXEC_MULTIPLE_CODEGEN_ENABLED =
+            key("table.exec.multiple-codegen.enabled")
                     .booleanType()
                     .defaultValue(false)
-                    .withDescription("Multiple input bhj");
+                    .withDescription("Multiple operator fusion codegen.");
 
     // ------------------------------------------------------------------------------------------
     // Enum option types

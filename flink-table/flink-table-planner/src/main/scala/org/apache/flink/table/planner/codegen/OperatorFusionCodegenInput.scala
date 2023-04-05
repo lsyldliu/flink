@@ -59,4 +59,6 @@ class OperatorFusionCodegenInput(
                                                         |  break;
                                                         |""".stripMargin)
   }
+
+  override def getOperatorCtx: CodeGeneratorContext = operatorCtx
 }

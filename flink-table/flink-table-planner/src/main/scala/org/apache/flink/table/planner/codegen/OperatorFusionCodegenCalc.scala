@@ -98,4 +98,5 @@ class OperatorFusionCodegenCalc(
     this.inputs(0).produceEndInput(multipleCtx)
   }
 
+  override def getOperatorCtx: CodeGeneratorContext = operatorCtx
 }

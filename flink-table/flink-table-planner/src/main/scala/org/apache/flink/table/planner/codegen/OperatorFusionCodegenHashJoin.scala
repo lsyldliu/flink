@@ -19,12 +19,14 @@
 package org.apache.flink.table.planner.codegen
 
 import org.apache.flink.table.data.TimestampData
-import org.apache.flink.table.planner.codegen.CodeGenUtils.{newName, rowFieldReadAccess, ROW_DATA}
+import org.apache.flink.table.planner.codegen.CodeGenUtils.{newName, newNames, BINARY_ROW, ROW_DATA}
+import org.apache.flink.table.planner.codegen.LongHashJoinGenerator.{genGetLongKey, genProjection}
 import org.apache.flink.table.planner.plan.nodes.exec.spec.JoinSpec
+import org.apache.flink.table.runtime.hashtable.LongHybridHashTable
 import org.apache.flink.table.runtime.operators.join.{FlinkJoinType, HashJoinType}
 import org.apache.flink.table.runtime.typeutils.BinaryRowDataSerializer
 import org.apache.flink.table.runtime.util.RowIterator
-import org.apache.flink.table.types.logical.{LocalZonedTimestampType, RowType, TimestampType}
+import org.apache.flink.table.types.logical.{LocalZonedTimestampType, LogicalType, RowType, TimestampType}
 import org.apache.flink.table.types.logical.LogicalTypeRoot.{BIGINT, DATE, DOUBLE, FLOAT, INTEGER, SMALLINT, TIME_WITHOUT_TIME_ZONE, TIMESTAMP_WITH_LOCAL_TIME_ZONE, TIMESTAMP_WITHOUT_TIME_ZONE, TINYINT}
 
 class OperatorFusionCodegenHashJoin(
@@ -37,6 +39,7 @@ class OperatorFusionCodegenHashJoin(
     estimatedLeftRowCount: Long,
     estimatedRightRowCount: Long,
     tryDistinctBuildRow: Boolean,
+    managedMemory: Long,
     compressionEnabled: Boolean,
     compressionBlockSize: Int)
   extends OperatorFusionCodegenSupport {
@@ -46,8 +49,7 @@ class OperatorFusionCodegenHashJoin(
   override def getExprCodeGenerator: ExprCodeGenerator = exprCodeGenerator
 
   private lazy val exprCodeGenerator = new ExprCodeGenerator(operatorCtx, false, true)
-  private lazy val leftInputType = inputs(0).getOutputType
-  private lazy val rightInputType = inputs(1).getOutputType
+
   private lazy val joinType = joinSpec.getJoinType
   private lazy val hashJoinType = HashJoinType.of(
     leftIsBuild,
@@ -56,12 +58,24 @@ class OperatorFusionCodegenHashJoin(
     joinType == FlinkJoinType.SEMI,
     joinType == FlinkJoinType.ANTI)
   private lazy val keyType =
-    RowType.of(joinSpec.getLeftKeys.map(idx => leftInputType.getTypeAt(idx)): _*)
+    RowType.of(joinSpec.getLeftKeys.map(idx => inputs(0).getOutputType.getTypeAt(idx)): _*)
+  private lazy val (buildKeys, probeKeys) = leftIsBuild match {
+    case true => (joinSpec.getLeftKeys, joinSpec.getRightKeys)
+    case false => (joinSpec.getRightKeys, joinSpec.getLeftKeys)
+  }
+  private lazy val (buildType, probeType) = leftIsBuild match {
+    case true => (inputs(0).getOutputType, inputs(1).getOutputType)
+    case false => (inputs(1).getOutputType, inputs(0).getOutputType)
+  }
+  private lazy val (buildRowSize, buildRowCount) = leftIsBuild match {
+    case true => (estimatedLeftAvgRowSize, estimatedLeftRowCount)
+    case false => (estimatedRightAvgRowSize, estimatedRightRowCount)
+  }
 
-  private lazy val hashTableClassTerm = newName("LongHashTable")
+  private lazy val Seq(buildToBinaryRow, probeToBinaryRow) =
+    newNames("buildToBinaryRow", "probeToBinaryRow")
+
   private lazy val hashTableTerm = newName("hashTable")
-  private var buildSerTerm: String = null
-  private var probeSerTerm: String = null
 
   override def doProduceProcess(multipleCtx: CodeGeneratorContext): Unit = {
     assert(inputs.size == 2)
@@ -102,95 +116,68 @@ class OperatorFusionCodegenHashJoin(
     // only probe side will call the consumeProcess method to consume the output record
     if (leftIsBuild) {
       if (inputId == 1) {
-        val buildSer = new BinaryRowDataSerializer(leftInputType.getFieldCount)
-        buildSerTerm = operatorCtx.addReusableObject(buildSer, "buildSer")
-
-        val (nullCheckBuildCode, nullCheckBuildTerm) =
-          genAnyNullsInKeys(joinSpec.getLeftKeys, input)
-        s"""
-           |$nullCheckBuildCode
-           |if (!$nullCheckBuildTerm) {
-           |  ${row.getCode}
-           |  $hashTableTerm.putBuildRow(${row.resultTerm});
-           |}
-       """.stripMargin
+        codegenBuild(input, row)
       } else {
-        val probeSer = new BinaryRowDataSerializer(rightInputType.getFieldCount)
-        probeSerTerm = operatorCtx.addReusableObject(probeSer, "probeSer")
-
-        val (keyEv, anyNull) = genStreamSideJoinKey(keyType, joinSpec.getRightKeys, input)
-        val (matched, checkCondition, buildVars) = getJoinCondition(leftInputType)
-        val resultVars = buildVars ++ input
-        val buildIterTerm = newName("buildIter")
-        val joinCode = hashJoinType match {
+        hashJoinType match {
           case HashJoinType.INNER =>
-            s"""
-               |// generate join key for probe side
-               |${keyEv.getCode}
-               |// find matches from hash table
-               |${classOf[RowIterator[_]].getCanonicalName} $buildIterTerm = $anyNull ?
-               |  null : $hashTableTerm.get(${keyEv.resultTerm});
-               |if ($buildIterTerm != null ) {
-               |  while ($buildIterTerm.advanceNext()) {
-               |    $ROW_DATA $matched = $buildIterTerm.getRow();
-               |    $checkCondition {
-               |      ${consumeProcess(multipleCtx, resultVars)}
-               |    }
-               |  }
-               |}
-           """.stripMargin
+            codegenInnerProbe(multipleCtx, input)
           case _ =>
             throw new UnsupportedOperationException(
               s"Multiple fusion codegen doesn't support $hashJoinType now.")
         }
-        joinCode
       }
     } else {
       if (inputId == 1) {
-        val probeSer = new BinaryRowDataSerializer(leftInputType.getFieldCount)
-        probeSerTerm = operatorCtx.addReusableObject(probeSer, "probeSer")
-
-        val (keyEv, anyNull) = genStreamSideJoinKey(keyType, joinSpec.getLeftKeys, input)
-        val (matched, checkCondition, buildVars) = getJoinCondition(rightInputType)
-        val resultVars = input ++ buildVars
-        val buildIterTerm = newName("buildIter")
-        val joinCode = hashJoinType match {
+        hashJoinType match {
           case HashJoinType.INNER =>
-            s"""
-               |// generate join key for probe side
-               |${keyEv.getCode}
-               |// find matches from hash table
-               |${classOf[RowIterator[_]].getCanonicalName} $buildIterTerm = $anyNull ?
-               |  null : $hashTableTerm.get(${keyEv.resultTerm});
-               |if ($buildIterTerm != null ) {
-               |  while ($buildIterTerm.advanceNext()) {
-               |    $ROW_DATA $matched = $buildIterTerm.getRow();
-               |    $checkCondition {
-               |      ${consumeProcess(multipleCtx, resultVars)}
-               |    }
-               |  }
-               |}
-           """.stripMargin
+            codegenInnerProbe(multipleCtx, input)
           case _ =>
             throw new UnsupportedOperationException(
               s"Multiple fusion codegen doesn't support $hashJoinType now.")
         }
-        joinCode
       } else {
-        val buildSer = new BinaryRowDataSerializer(rightInputType.getFieldCount)
-        buildSerTerm = operatorCtx.addReusableObject(buildSer, "buildSer")
-
-        val (nullCheckBuildCode, nullCheckBuildTerm) =
-          genAnyNullsInKeys(joinSpec.getRightKeys, input)
-        s"""
-           |$nullCheckBuildCode
-           |if (!$nullCheckBuildTerm) {
-           |  ${row.getCode}
-           |  $hashTableTerm.putBuildRow(${row.resultTerm});
-           |}
-       """.stripMargin
+        codegenBuild(input, row)
       }
     }
+  }
+
+  private def codegenBuild(input: Seq[GeneratedExpression], row: GeneratedExpression): String = {
+    val (nullCheckBuildCode, nullCheckBuildTerm) =
+      genAnyNullsInKeys(buildKeys, input)
+    s"""
+       |$nullCheckBuildCode
+       |if (!$nullCheckBuildTerm) {
+       |  ${row.getCode}
+       |  $hashTableTerm.putBuildRow(${row.resultTerm} instanceof $BINARY_ROW ?
+       |    ($BINARY_ROW) ${row.resultTerm} : $buildToBinaryRow.apply(${row.resultTerm}));
+       |}
+       """.stripMargin
+  }
+
+  private def codegenInnerProbe(
+      multipleCtx: CodeGeneratorContext,
+      input: Seq[GeneratedExpression]): String = {
+    val (keyEv, anyNull) = genStreamSideJoinKey(keyType, probeKeys, input)
+    val keyCode = keyEv.getCode
+    val (matched, checkCondition, buildVars) = getJoinCondition(buildType)
+    val resultVars = input ++ buildVars
+    val buildIterTerm = newName("buildIter")
+    // val probeInputRow = prepareInputRowVar(inputId, row.resultTerm, input)
+    s"""
+       |// generate join key for probe side
+       |$keyCode
+       |// find matches from hash table
+       |${classOf[RowIterator[_]].getCanonicalName} $buildIterTerm = $anyNull ?
+       |  null : $hashTableTerm.get(${keyEv.resultTerm});
+       |if ($buildIterTerm != null ) {
+       |  while ($buildIterTerm.advanceNext()) {
+       |    $ROW_DATA $matched = $buildIterTerm.getRow();
+       |    $checkCondition {
+       |      ${consumeProcess(multipleCtx, resultVars)}
+       |    }
+       |  }
+       |}
+           """.stripMargin
   }
 
   override def doConsumeEndInput(multipleCtx: CodeGeneratorContext, inputId: Int): String = {
@@ -216,19 +203,6 @@ class OperatorFusionCodegenHashJoin(
        """.stripMargin
       }
     }
-  }
-
-  private def genGetLongKey(keyType: RowType, keyMapping: Array[Int], rowTerm: String): String = {
-    val singleType = keyType.getTypeAt(0)
-    val getCode = rowFieldReadAccess(keyMapping(0), rowTerm, singleType)
-    val term = singleType.getTypeRoot match {
-      case FLOAT => s"Float.floatToIntBits($getCode)"
-      case DOUBLE => s"Double.doubleToLongBits($getCode)"
-      case TIMESTAMP_WITHOUT_TIME_ZONE => s"$getCode.getMillisecond()"
-      case TIMESTAMP_WITH_LOCAL_TIME_ZONE => s"$getCode.getMillisecond()"
-      case _ => getCode
-    }
-    s"return $term;"
   }
 
   /**
@@ -319,5 +293,95 @@ class OperatorFusionCodegenHashJoin(
         throw new IllegalArgumentException(
           s"JoinCodegenSupport.genBuildSideVars should not take $hashJoinType as the JoinType")
     }
+  }
+
+  override def getOperatorCtx: CodeGeneratorContext = operatorCtx
+
+  override def getManagedMemory: Long = managedMemory
+
+  /**
+   * This method is used to initialize operator code, it should be called before initCode & openCode
+   * & closeCode.
+   */
+  override def initializeOperator(): Unit = {
+    val buildSer = new BinaryRowDataSerializer(buildType.getFieldCount)
+    val buildSerTerm = operatorCtx.addReusableObject(buildSer, "buildSer")
+    val probeSer = new BinaryRowDataSerializer(probeType.getFieldCount)
+    val probeSerTerm = operatorCtx.addReusableObject(probeSer, "probeSer")
+
+    val bGenProj =
+      genProjection(
+        operatorCtx.tableConfig,
+        operatorCtx.classLoader,
+        buildType.getChildren.toArray(Array[LogicalType]()))
+    operatorCtx.addReusableInnerClass(bGenProj.getClassName, bGenProj.getCode)
+    val pGenProj =
+      genProjection(
+        operatorCtx.tableConfig,
+        operatorCtx.classLoader,
+        probeType.getChildren.toArray(Array[LogicalType]()))
+    operatorCtx.addReusableInnerClass(pGenProj.getClassName, pGenProj.getCode)
+
+    operatorCtx.addReusableMember(s"${bGenProj.getClassName} $buildToBinaryRow;")
+    val buildProjRefs = operatorCtx.addReusableObject(bGenProj.getReferences, "buildProjRefs")
+    operatorCtx.addReusableInitStatement(
+      s"$buildToBinaryRow = new ${bGenProj.getClassName}($buildProjRefs);")
+
+    operatorCtx.addReusableMember(s"${pGenProj.getClassName} $probeToBinaryRow;")
+    val probeProjRefs = operatorCtx.addReusableObject(pGenProj.getReferences, "probeProjRefs")
+    operatorCtx.addReusableInitStatement(
+      s"$probeToBinaryRow = new ${pGenProj.getClassName}($probeProjRefs);")
+
+    val hashTableClassTerm = newName("LongHashTable")
+    val tableCode =
+      s"""
+         |public class $hashTableClassTerm extends ${classOf[LongHybridHashTable].getCanonicalName} {
+         |
+         |  public $hashTableClassTerm(long memorySize) {
+         |    super(getContainingTask(),
+         |      $compressionEnabled, $compressionBlockSize,
+         |      $buildSerTerm, $probeSerTerm,
+         |      getContainingTask().getEnvironment().getMemoryManager(),
+         |      memorySize,
+         |      getContainingTask().getEnvironment().getIOManager(),
+         |      $buildRowSize,
+         |      ${buildRowCount}L / getRuntimeContext().getNumberOfParallelSubtasks());
+         |  }
+         |
+         |  @Override
+         |  public long getBuildLongKey($ROW_DATA row) {
+         |    ${genGetLongKey(keyType, buildKeys, "row")}
+         |  }
+         |
+         |  @Override
+         |  public long getProbeLongKey($ROW_DATA row) {
+         |    ${genGetLongKey(keyType, probeKeys, "row")}
+         |  }
+         |
+         |  @Override
+         |  public $BINARY_ROW probeToBinary($ROW_DATA row) {
+         |    if (row instanceof $BINARY_ROW) {
+         |      return ($BINARY_ROW) row;
+         |    } else {
+         |      return $probeToBinaryRow.apply(row);
+         |    }
+         |  }
+         |}
+       """.stripMargin
+    operatorCtx.addReusableInnerClass(hashTableClassTerm, tableCode)
+    operatorCtx.addReusableMember(s"$hashTableClassTerm $hashTableTerm;")
+    val memorySizeTerm = newName("memorySize")
+    operatorCtx.addReusableOpenStatement(
+      s"long $memorySizeTerm = computeMemorySize($managedMemoryFraction);")
+    operatorCtx.addReusableOpenStatement(
+      s"$hashTableTerm = new $hashTableClassTerm($memorySizeTerm);")
+
+    operatorCtx.addReusableCloseStatement(s"""
+                                             |if (this.$hashTableTerm != null) {
+                                             |  this.$hashTableTerm.close();
+                                             |  this.$hashTableTerm.free();
+                                             |  this.$hashTableTerm = null;
+                                             |}
+       """.stripMargin)
   }
 }

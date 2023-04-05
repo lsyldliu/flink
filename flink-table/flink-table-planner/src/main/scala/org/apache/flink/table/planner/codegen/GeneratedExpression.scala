@@ -95,9 +95,10 @@ case class GeneratedExpression(
       val typeTerm = boxedTypeTermForType(resultType)
       val serTerm = ctx.addReusableTypeSerializer(resultType)
       val newResultTerm = newName("field")
+      // does one expression will be copy multiple time?
       val newCode =
         s"""
-           |$code
+           |$getCode
            |$typeTerm $newResultTerm = $resultTerm;
            |if (!$nullTerm) {
            |  $newResultTerm = ($typeTerm) ($serTerm.copy($newResultTerm));

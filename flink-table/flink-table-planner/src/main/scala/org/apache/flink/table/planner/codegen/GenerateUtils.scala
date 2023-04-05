@@ -582,6 +582,7 @@ object GenerateUtils {
       inputType: LogicalType,
       inputTerm: String,
       index: Int): GeneratedExpression = {
+    // Another solution is return a new GeneratedExpression, the code is assigned by call getCode method
     if (ctx.getReusableInputExprs(inputTerm, index) != null) {
       return ctx.getReusableInputExprs(inputTerm, index)
     }

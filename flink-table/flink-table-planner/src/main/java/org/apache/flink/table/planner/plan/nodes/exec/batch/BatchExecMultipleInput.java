@@ -38,8 +38,8 @@ import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 import org.apache.flink.table.planner.plan.nodes.exec.SingleTransformationTranslator;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.ExecNodeUtil;
 import org.apache.flink.table.planner.plan.nodes.exec.visitor.AbstractExecNodeExactlyOnceVisitor;
-import org.apache.flink.table.runtime.operators.multipleinput.BatchMultipleFusionStreamOperatorFactory;
 import org.apache.flink.table.runtime.operators.multipleinput.BatchMultipleInputStreamOperatorFactory;
+import org.apache.flink.table.runtime.operators.multipleinput.OperatorFusionCodegenFactory;
 import org.apache.flink.table.runtime.operators.multipleinput.TableOperatorWrapperGenerator;
 import org.apache.flink.table.runtime.operators.multipleinput.input.InputSpec;
 import org.apache.flink.table.runtime.operators.multipleinput.input.MultipleInputSpec;
@@ -56,7 +56,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static org.apache.flink.table.api.config.ExecutionConfigOptions.TABLE_EXEC_MULTIPLE_INPUT_BHJ;
+import scala.Tuple2;
+
+import static org.apache.flink.table.api.config.ExecutionConfigOptions.TABLE_EXEC_MULTIPLE_CODEGEN_ENABLED;
 import static org.apache.flink.util.Preconditions.checkArgument;
 
 /**
@@ -115,7 +117,7 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
     @Override
     protected Transformation<RowData> translateToPlanInternal(
             PlannerBase planner, ExecNodeConfig config) {
-        final List<Transformation<?>> inputTransforms = new ArrayList<>();
+        List<Transformation<?>> inputTransforms = new ArrayList<>();
         final List<ExecEdge> inputEdges = getInputEdges();
         for (ExecEdge inputEdge : inputEdges) {
             inputTransforms.add(inputEdge.translateToPlan(planner));
@@ -126,8 +128,11 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
                         .mapToInt(i -> i)
                         .toArray();
 
-        // multiple input codegen
-        if (supportMultipleCodegen(rootNode, originalEdges)) {
+        MultipleInputTransformation<RowData> multipleInputTransform = null;
+        long memoryBytes = 0;
+        boolean multipleCodegenEnabled = config.get(TABLE_EXEC_MULTIPLE_CODEGEN_ENABLED);
+        if (multipleCodegenEnabled && supportMultipleCodegen(rootNode, originalEdges)) {
+            // multiple operator fusion codegen
             final List<MultipleInputSpec> multipleInputSpecs = new ArrayList<>();
             final List<OperatorFusionCodegenSupport> codegenSupportInputs = new ArrayList<>();
             int i = 0;
@@ -177,33 +182,25 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
             codegenRootOp.addInput(rootNode.translateToCodegenOp(planner));
 
             // generate multiple input operator
-            codegenRootOp.generateMultipleOperator(multipleInputSpecs);
-        }
-
-        final Transformation<?> outputTransform = rootNode.translateToPlan(planner);
-
-        final TableOperatorWrapperGenerator generator =
-                new TableOperatorWrapperGenerator(inputTransforms, outputTransform, readOrders);
-        generator.generate();
-
-        final List<Pair<Transformation<?>, InputSpec>> inputTransformAndInputSpecPairs =
-                generator.getInputTransformAndInputSpecPairs();
-
-        boolean multipleInputBhj = config.get(TABLE_EXEC_MULTIPLE_INPUT_BHJ);
-
-        MultipleInputTransformation<RowData> multipleInputTransform;
-        if (multipleInputBhj) {
+            Tuple2<OperatorFusionCodegenFactory<RowData>, Object> multipleOperatorTuple =
+                    codegenRootOp.generateMultipleOperator(multipleInputSpecs);
             multipleInputTransform =
                     new MultipleInputTransformation<>(
                             createTransformationName(config),
-                            new BatchMultipleFusionStreamOperatorFactory(
-                                    inputTransformAndInputSpecPairs.stream()
-                                            .map(Pair::getValue)
-                                            .collect(Collectors.toList())),
+                            multipleOperatorTuple._1,
                             InternalTypeInfo.of(getOutputType()),
-                            generator.getParallelism(),
+                            -1,
                             false);
+            memoryBytes = (long) multipleOperatorTuple._2;
         } else {
+            final Transformation<?> outputTransform = rootNode.translateToPlan(planner);
+
+            final TableOperatorWrapperGenerator generator =
+                    new TableOperatorWrapperGenerator(inputTransforms, outputTransform, readOrders);
+            generator.generate();
+
+            final List<Pair<Transformation<?>, InputSpec>> inputTransformAndInputSpecPairs =
+                    generator.getInputTransformAndInputSpecPairs();
             multipleInputTransform =
                     new MultipleInputTransformation<>(
                             createTransformationName(config),
@@ -216,28 +213,30 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
                             InternalTypeInfo.of(getOutputType()),
                             generator.getParallelism(),
                             false);
+            if (generator.getMaxParallelism() > 0) {
+                multipleInputTransform.setMaxParallelism(generator.getMaxParallelism());
+            }
+            // set resources
+            multipleInputTransform.setResources(
+                    generator.getMinResources(), generator.getPreferredResources());
+            final int memoryWeight = generator.getManagedMemoryWeight();
+            memoryBytes = (long) memoryWeight << 20;
+            // here set the all elements of InputTransformation and its id index indicates the order
+            inputTransforms =
+                    inputTransformAndInputSpecPairs.stream()
+                            .map(Pair::getKey)
+                            .collect(Collectors.toList());
         }
 
         multipleInputTransform.setDescription(createTransformationDescription(config));
-        // here set the all elements of InputTransformation and its id index indicates the order
-        inputTransformAndInputSpecPairs.forEach(
-                input -> multipleInputTransform.addInput(input.getKey()));
         LOG.info(
                 "BatchExecMultiInput transformation description: \n{}.",
                 multipleInputTransform.getDescription());
-        LOG.info(
-                "BatchExecMultiInput inputTransformAndInputSpecPairs: \n{}.",
-                inputTransformAndInputSpecPairs);
-        if (generator.getMaxParallelism() > 0) {
-            multipleInputTransform.setMaxParallelism(generator.getMaxParallelism());
-        }
-        // set resources
-        multipleInputTransform.setResources(
-                generator.getMinResources(), generator.getPreferredResources());
-        final int memoryWeight = generator.getManagedMemoryWeight();
-        final long memoryBytes = (long) memoryWeight << 20;
-        ExecNodeUtil.setManagedMemoryWeight(multipleInputTransform, memoryBytes);
 
+        for (Transformation input : inputTransforms) {
+            multipleInputTransform.addInput(input);
+        }
+        ExecNodeUtil.setManagedMemoryWeight(multipleInputTransform, memoryBytes);
         // set chaining strategy for source chaining
         multipleInputTransform.setChainingStrategy(ChainingStrategy.HEAD_WITH_SOURCES);
 

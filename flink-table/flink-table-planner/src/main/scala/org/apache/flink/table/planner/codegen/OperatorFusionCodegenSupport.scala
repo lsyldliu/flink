@@ -36,6 +36,8 @@ trait OperatorFusionCodegenSupport {
     case _: OperatorFusionCodegenOutput => "out_"
   }
 
+  protected var managedMemoryFraction: Double = 0
+
   /** Which ExecNode is calling produce() of this one. It's itself for the first . */
   protected var output: OperatorFusionCodegenSupport = null
 
@@ -45,7 +47,7 @@ trait OperatorFusionCodegenSupport {
    */
   protected var inputIdOfOutputNode = 1
 
-  protected val inputs: ListBuffer[OperatorFusionCodegenSupport] =
+  val inputs: ListBuffer[OperatorFusionCodegenSupport] =
     new ListBuffer[OperatorFusionCodegenSupport]()
 
   def addInput(input: OperatorFusionCodegenSupport): Unit = {
@@ -54,9 +56,55 @@ trait OperatorFusionCodegenSupport {
 
   def getOutputType: RowType
 
-  def managedMemory: Long = 0
+  def getOperatorCtx: CodeGeneratorContext
 
   def getExprCodeGenerator: ExprCodeGenerator
+
+  def getManagedMemory: Long = 0L
+
+  final def setManagedMemFraction(managedMemoryFraction: Double) =
+    this.managedMemoryFraction = managedMemoryFraction
+
+  /**
+   * This method is used to initialize operator code, it should be called before initCode & openCode
+   * & closeCode.
+   */
+  def initializeOperator(): Unit = {}
+
+  final def addReusableInitCode(fusionCtx: CodeGeneratorContext): Unit = {
+    val operatorCtx = getOperatorCtx
+    // add operator reusable member and inner class definition to multiple codegen ctx
+    fusionCtx.addReusableMember(operatorCtx.reuseMemberCode())
+    fusionCtx.addReusableInnerClass(
+      newName(this.getClass.getCanonicalName),
+      operatorCtx.reuseInnerClassDefinitionCode())
+
+    // add init code
+    val initCode = operatorCtx.reuseInitCode()
+    if (!initCode.isEmpty) {
+      val initMethodTerm = newName(variablePrefix + "init")
+      fusionCtx.addReusableMember(
+        s"""
+           |private void $initMethodTerm(Object[] references) throws Exception {
+           |  ${operatorCtx.reuseInitCode()}
+           |}
+     """.stripMargin)
+
+      val refs =
+        fusionCtx.addReusableObject(operatorCtx.references.toArray, variablePrefix + "Refs")
+      fusionCtx.addReusableInitStatement(s"$initMethodTerm($refs);")
+    }
+  }
+
+  final def addReusableOpenCode(fusionCtx: CodeGeneratorContext): Unit = {
+    // add open code
+    fusionCtx.addReusableOpenStatement(getOperatorCtx.reuseOpenCode())
+  }
+
+  final def addReusableCloseCode(fusionCtx: CodeGeneratorContext): Unit = {
+    // add close code
+    fusionCtx.addReusableCloseStatement(getOperatorCtx.reuseCloseCode())
+  }
 
   final def produceProcess(
       multipleCtx: CodeGeneratorContext,
@@ -80,23 +128,19 @@ trait OperatorFusionCodegenSupport {
       assert(row != null, "outputVars and row can't both be null.")
       getExprCodeGenerator.generateInputAccessExprs()
     }
-    val rowVar = new GeneratedExpression(row, NEVER_NULL, NO_CODE, getOutputType)
+    val rowVar = prepareRowVar(row, outputVars)
 
     // we need to bind out ctx before call its consume to reuse the input expression
-    val rowTerm: String = if (row != null) {
-      row
-    } else {
-      newName(variablePrefix + DEFAULT_OUT_RECORD_TERM)
-    }
-
-    // this is used to generate inputVars when outputVars is null
     if (inputIdOfOutputNode == 1) {
-      output.getExprCodeGenerator.bindInputWithExpr(getOutputType, inputVars, rowTerm)
+      output.getExprCodeGenerator.bindInputWithExpr(getOutputType, inputVars, rowVar.resultTerm)
     } else {
-      output.getExprCodeGenerator.bindSecondInputWithExpr(getOutputType, inputVars, rowTerm)
+      output.getExprCodeGenerator.bindSecondInputWithExpr(
+        getOutputType,
+        inputVars,
+        rowVar.resultTerm)
     }
 
-    // we always pass column vars and row var to parent simultaneously, the parent decide to use which one
+    // we always pass column vars and row var to parent simultaneously, the output decide to use which one
     s"""
        |${output.doConsumeProcess(multipleCtx, inputIdOfOutputNode, inputVars, rowVar)}
      """.stripMargin
@@ -145,7 +189,7 @@ trait OperatorFusionCodegenSupport {
       inputId: Int,
       row: String,
       colVars: Seq[GeneratedExpression]): GeneratedExpression = {
-    val inputOp = inputs(inputId - 1)
+    val inputOp = inputs(inputId)
     if (row != null) {
       new GeneratedExpression(row, NEVER_NULL, NO_CODE, inputOp.getOutputType)
     } else {

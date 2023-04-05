@@ -324,6 +324,7 @@ public class BatchExecHashJoin extends ExecNodeBase<RowData>
                         estimatedLeftRowCount,
                         estimatedRightRowCount,
                         tryDistinctBuildRow,
+                        managedMemory,
                         compressionEnabled,
                         compressionBlockSize);
         codegenHashJoin.addInput(leftInput);
@@ -333,6 +334,20 @@ public class BatchExecHashJoin extends ExecNodeBase<RowData>
 
     @Override
     public boolean supportMultipleCodegen() {
-        return true;
+        RowType leftType = (RowType) getInputEdges().get(0).getOutputType();
+        LogicalType[] keyFieldTypes =
+                IntStream.of(joinSpec.getLeftKeys())
+                        .mapToObj(leftType::getTypeAt)
+                        .toArray(LogicalType[]::new);
+        RowType keyType = RowType.of(keyFieldTypes);
+        FlinkJoinType joinType = joinSpec.getJoinType();
+        HashJoinType hashJoinType =
+                HashJoinType.of(
+                        leftIsBuild,
+                        joinType.isLeftOuter(),
+                        joinType.isRightOuter(),
+                        joinType == FlinkJoinType.SEMI,
+                        joinType == FlinkJoinType.ANTI);
+        return LongHashJoinGenerator.support(hashJoinType, keyType, joinSpec.getFilterNulls());
     }
 }
