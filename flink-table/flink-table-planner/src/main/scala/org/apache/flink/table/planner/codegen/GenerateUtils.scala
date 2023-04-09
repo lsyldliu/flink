@@ -468,7 +468,7 @@ object GenerateUtils {
         } else {
           generateFieldAccess(ctx, inputType, inputTerm, index, deepCopy)
         }
-
+        // for multiple operator codegen fusion case, we can return the expr directly here, doesn't add it the reusable list to cache again
         ctx.addReusableInputUnboxingExprs(inputTerm, index, expr)
         expr
     }
@@ -582,8 +582,9 @@ object GenerateUtils {
       inputType: LogicalType,
       inputTerm: String,
       index: Int): GeneratedExpression = {
-    // Another solution is return a new GeneratedExpression, the code is assigned by call getCode method
     if (ctx.getReusableInputExprs(inputTerm, index) != null) {
+      // Another solution is return a new GeneratedExpression each time, the code is assigned by call getCode method
+      // return new GeneratedExpression("resultTerm", "nullTerm", getCode, type);
       return ctx.getReusableInputExprs(inputTerm, index)
     }
 

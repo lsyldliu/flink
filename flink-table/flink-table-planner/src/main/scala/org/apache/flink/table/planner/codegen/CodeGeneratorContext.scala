@@ -20,6 +20,7 @@ package org.apache.flink.table.planner.codegen
 import org.apache.flink.api.common.functions.Function
 import org.apache.flink.api.common.typeutils.TypeSerializer
 import org.apache.flink.configuration.ReadableConfig
+import org.apache.flink.table.api.config.ExecutionConfigOptions
 import org.apache.flink.table.data.GenericRowData
 import org.apache.flink.table.data.conversion.{DataStructureConverter, DataStructureConverters}
 import org.apache.flink.table.functions.{FunctionContext, TableFunction, UserDefinedFunction}
@@ -96,8 +97,8 @@ class CodeGeneratorContext(val tableConfig: ReadableConfig, val classLoader: Cla
     mutable.LinkedHashSet[String]()
 
   // set of statements that will be added only for multiple fusion codegen process method
-  private val reusableMultipleProcessStatements: mutable.LinkedHashSet[String] =
-    mutable.LinkedHashSet[String]()
+  private val reusableMultipleProcessStatements: mutable.TreeMap[Int, String] =
+    mutable.TreeMap[Int, String]()
 
   // set of statements that will be added only for multiple fusion codegen endInput method
   private val reusableMultipleEndInputStatements: mutable.LinkedHashSet[String] =
@@ -152,6 +153,9 @@ class CodeGeneratorContext(val tableConfig: ReadableConfig, val classLoader: Cla
 
   /** the class is used as the  generated operator code's base class. */
   private var operatorBaseClass: Class[_] = classOf[TableStreamOperator[_]]
+
+  def fieldCopyEnabled: Boolean =
+    tableConfig.get(ExecutionConfigOptions.TABLE_EXEC_CODEGEN_COPY_ENABLED)
 
   // ---------------------------------------------------------------------------------
   // Getter
@@ -330,7 +334,7 @@ class CodeGeneratorContext(val tableConfig: ReadableConfig, val classLoader: Cla
    *   [MultipleInputStreamOperator]
    */
   def reuseMultipleProcessCode(): String = {
-    reusableMultipleProcessStatements.mkString(",\n")
+    reusableMultipleProcessStatements.values.mkString(",\n")
   }
 
   /**
@@ -421,8 +425,8 @@ class CodeGeneratorContext(val tableConfig: ReadableConfig, val classLoader: Cla
   def addReusableCleanupStatement(s: String): Unit = reusableCleanupStatements.add(s)
 
   /** Adds a reusable multiple process statement */
-  def addReusableMultipleProcessStatement(s: String): Unit =
-    reusableMultipleProcessStatements.add(s)
+  def addReusableMultipleProcessStatement(inputId: Int, s: String): Unit =
+    reusableMultipleProcessStatements.put(inputId, s)
 
   /** Adds a reusable multiple endInput statement */
   def addReusableMultipleEndInputStatement(s: String): Unit =

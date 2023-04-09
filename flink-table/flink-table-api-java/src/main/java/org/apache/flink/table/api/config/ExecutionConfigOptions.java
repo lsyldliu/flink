@@ -548,6 +548,12 @@ public class ExecutionConfigOptions {
                     .defaultValue(false)
                     .withDescription("Multiple operator fusion codegen.");
 
+    public static final ConfigOption<Boolean> TABLE_EXEC_CODEGEN_COPY_ENABLED =
+            key("table.exec.codegen-copy.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription("If true, the field will make a deep copy during codegen.");
+
     // ------------------------------------------------------------------------------------------
     // Enum option types
     // ------------------------------------------------------------------------------------------

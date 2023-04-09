@@ -40,22 +40,41 @@ class OperatorFusionCodegenInput(
     val inputTerm = DEFAULT_INPUT_TERM + multipleInputId
     exprCodeGenerator.bindInput(outputType, inputTerm)
 
+    val processTerm = "processInput" + multipleInputId
+    multipleCtx.addReusableMember(
+      s"""
+         |public void $processTerm($inputTypeTerm $inputTerm) throws Exception {
+         |  ${consumeProcess(null, inputTerm)}
+         |}
+         |""".stripMargin
+    )
     multipleCtx.addReusableMultipleProcessStatement(
+      multipleInputId,
       s"""
          |new ${className[AbstractInput[_, _]]}(this, $multipleInputId) {
          |  @Override
          |  public void processElement($STREAM_RECORD $ELEMENT) throws Exception {
+         |    // InputType: ${outputType.asSerializableString()}
          |    $inputTypeTerm $inputTerm = ($inputTypeTerm) $ELEMENT.getValue();
-         |    ${consumeProcess(null, inputTerm)}
+         |    $processTerm($inputTerm);
          |  }
          |}
-         |""".stripMargin)
+         |""".stripMargin
+    )
   }
 
   override def doProduceEndInput(multipleCtx: CodeGeneratorContext): Unit = {
+    val endInputTerm = "endInput" + multipleInputId
+    multipleCtx.addReusableMember(
+      s"""
+         |public void $endInputTerm() throws Exception {
+         |  ${consumeEndInput()}
+         |}
+         |""".stripMargin
+    )
     multipleCtx.addReusableMultipleEndInputStatement(s"""
                                                         |case $multipleInputId:
-                                                        |  ${consumeEndInput()}
+                                                        |  $endInputTerm();
                                                         |  break;
                                                         |""".stripMargin)
   }

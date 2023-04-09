@@ -18,8 +18,9 @@
 
 package org.apache.flink.table.planner.codegen
 
+import org.apache.flink.table.data.BoxedWrapperRowData
 import org.apache.flink.table.data.binary.BinaryRowData
-import org.apache.flink.table.planner.codegen.CodeGenUtils.{newName, DEFAULT_OUT_RECORD_TERM, DEFAULT_OUT_RECORD_WRITER_TERM}
+import org.apache.flink.table.planner.codegen.CodeGenUtils.{newName, DEFAULT_OUT_RECORD_WRITER_TERM}
 import org.apache.flink.table.planner.codegen.GeneratedExpression.{NEVER_NULL, NO_CODE}
 import org.apache.flink.table.types.logical.RowType
 
@@ -174,8 +175,8 @@ trait OperatorFusionCodegenSupport {
         // need copy the colVars first to avoid it code is used during generate row
         colVars.map(_.copyExpr),
         getOutputType,
-        classOf[BinaryRowData],
-        newName(variablePrefix + DEFAULT_OUT_RECORD_TERM),
+        classOf[BoxedWrapperRowData],
+        newName(variablePrefix + "outRow"),
         Some(newName(variablePrefix + DEFAULT_OUT_RECORD_WRITER_TERM))
       )
     }

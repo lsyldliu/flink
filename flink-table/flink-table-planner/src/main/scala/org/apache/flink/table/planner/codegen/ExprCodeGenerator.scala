@@ -423,6 +423,7 @@ class ExprCodeGenerator(
       val resetWriter = s"$writer.reset();"
       val completeWriter: String = s"$writer.complete();"
       s"""
+         |// wrap variable to row
          |$outRowInitCode
          |$resetWriter
          |$setFieldsCode
@@ -430,6 +431,7 @@ class ExprCodeGenerator(
         """.stripMargin
     } else {
       s"""
+         |// wrap variable to row
          |$outRowInitCode
          |$setFieldsCode
         """.stripMargin
@@ -466,7 +468,14 @@ class ExprCodeGenerator(
       inputRef.getIndex - input1Arity
     }
 
-    generateInputAccess(ctx, input._1, input._2, index, nullableInput, true, opFusionCodegen)
+    generateInputAccess(
+      ctx,
+      input._1,
+      input._2,
+      index,
+      nullableInput,
+      ctx.fieldCopyEnabled,
+      opFusionCodegen)
   }
 
   override def visitTableInputRef(rexTableInputRef: RexTableInputRef): GeneratedExpression =

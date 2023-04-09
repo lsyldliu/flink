@@ -67,29 +67,6 @@ class OperatorFusionCodegenOutput(operatorCtx: CodeGeneratorContext)
   def generateMultipleOperator(
       inputSpecs: util.List[MultipleInputSpec]): (OperatorFusionCodegenFactory[RowData], Long) = {
     val multipleCtx = new CodeGeneratorContext(operatorCtx.tableConfig, operatorCtx.classLoader)
-    // generate process code
-    inputs(0).produceProcess(multipleCtx, 1, this)
-    // generate endInput code
-    inputs(0).produceEndInput(multipleCtx)
-
-    val (operators, totalManagedMemory) = getAllOperatorAndMem
-
-    var iter = operators.iterator
-    while (iter.hasNext) {
-      val op = iter.next
-      op.initializeOperator
-      // init code
-      op.addReusableInitCode(multipleCtx)
-      // open code
-      op.addReusableOpenCode(multipleCtx)
-    }
-
-    iter = operators.descendingIterator
-    while (iter.hasNext) {
-      val op = iter.next
-      // close code
-      op.addReusableCloseCode(multipleCtx)
-    }
 
     multipleCtx.addReusableMember(
       s"""
@@ -115,6 +92,29 @@ class OperatorFusionCodegenOutput(operatorCtx: CodeGeneratorContext)
          """.stripMargin
     )
 
+    // generate process code
+    inputs(0).produceProcess(multipleCtx, 1, this)
+    // generate endInput code
+    inputs(0).produceEndInput(multipleCtx)
+
+    val (operators, totalManagedMemory) = getAllOperatorAndMem
+    var iter = operators.iterator
+    while (iter.hasNext) {
+      val op = iter.next
+      op.initializeOperator
+      // init code
+      op.addReusableInitCode(multipleCtx)
+      // open code
+      op.addReusableOpenCode(multipleCtx)
+    }
+
+    iter = operators.descendingIterator
+    while (iter.hasNext) {
+      val op = iter.next
+      // close code
+      op.addReusableCloseCode(multipleCtx)
+    }
+
     multipleCtx.addReusableMember(
       s"private final $STREAM_RECORD $OUT_ELEMENT = new $STREAM_RECORD(null);")
 
@@ -130,7 +130,7 @@ class OperatorFusionCodegenOutput(operatorCtx: CodeGeneratorContext)
     val operatorName = newName("BatchMultipleInputStreamOperator")
     val operatorCode =
       s"""
-      public class $operatorName extends ${className[AbstractStreamOperatorV2[_]]}
+      public final class $operatorName extends ${className[AbstractStreamOperatorV2[_]]}
           implements ${className[MultipleInputStreamOperator[_]]},
           ${className[InputSelectable]},
           ${className[BoundedMultiInput]} {

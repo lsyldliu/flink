@@ -60,6 +60,7 @@ import scala.Tuple2;
 
 import static org.apache.flink.table.api.config.ExecutionConfigOptions.TABLE_EXEC_MULTIPLE_CODEGEN_ENABLED;
 import static org.apache.flink.util.Preconditions.checkArgument;
+import static org.apache.flink.util.Preconditions.checkState;
 
 /**
  * Batch {@link ExecNode} for multiple input which contains a sub-graph of {@link ExecNode}s. The
@@ -184,13 +185,18 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
             // generate multiple input operator
             Tuple2<OperatorFusionCodegenFactory<RowData>, Object> multipleOperatorTuple =
                     codegenRootOp.generateMultipleOperator(multipleInputSpecs);
+            Pair<Integer, Integer> parallelismPair = getInputParallelism(inputTransforms);
             multipleInputTransform =
                     new MultipleInputTransformation<>(
                             createTransformationName(config),
                             multipleOperatorTuple._1,
                             InternalTypeInfo.of(getOutputType()),
-                            -1,
+                            parallelismPair.getLeft(),
                             false);
+
+            if (parallelismPair.getRight() > 0) {
+                multipleInputTransform.setMaxParallelism(parallelismPair.getRight());
+            }
             memoryBytes = (long) multipleOperatorTuple._2;
         } else {
             final Transformation<?> outputTransform = rootNode.translateToPlan(planner);
@@ -289,5 +295,23 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
             }
         }
         innerNodes.add(currentNode);
+    }
+
+    private Pair<Integer, Integer> getInputParallelism(
+            List<Transformation<?>> inputTransformations) {
+        int parallelism = -1;
+        int maxParallelism = -1;
+        for (Transformation<?> transform : inputTransformations) {
+            parallelism = Math.max(parallelism, transform.getParallelism());
+            int currentMaxParallelism = transform.getMaxParallelism();
+            if (maxParallelism < 0) {
+                maxParallelism = currentMaxParallelism;
+            } else {
+                checkState(
+                        currentMaxParallelism < 0 || maxParallelism == currentMaxParallelism,
+                        "Max parallelism of a transformation in MultipleInput node is different from others. This is a bug.");
+            }
+        }
+        return Pair.of(parallelism, maxParallelism);
     }
 }
