@@ -33,8 +33,6 @@ import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
 import org.apache.flink.table.planner.codegen.HashCodeGenerator;
-import org.apache.flink.table.planner.codegen.OperatorFusionCodegenInput;
-import org.apache.flink.table.planner.codegen.OperatorFusionCodegenSupport;
 import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
@@ -68,8 +66,6 @@ public class BatchExecExchange extends CommonExecExchange implements BatchExecNo
     // the required exchange mode for reusable BatchExecExchange
     // if it's None, use value from configuration
     @Nullable private StreamExchangeMode requiredExchangeMode;
-
-    private OperatorFusionCodegenInput codegenInput;
 
     public BatchExecExchange(
             ReadableConfig tableConfig,
@@ -230,29 +226,5 @@ public class BatchExecExchange extends CommonExecExchange implements BatchExecNo
     @VisibleForTesting
     public Optional<StreamExchangeMode> getRequiredExchangeMode() {
         return Optional.ofNullable(requiredExchangeMode);
-    }
-
-    @Override
-    public boolean supportMultipleCodegen() {
-        return true;
-    }
-
-    @Override
-    protected OperatorFusionCodegenSupport translateToCodegenOpInternal(
-            PlannerBase planner, ExecNodeConfig config) {
-        assert (codegenInput != null);
-        return codegenInput;
-    }
-
-    @Override
-    public OperatorFusionCodegenSupport getInputCodegenOp(
-            int multipleInputId, PlannerBase planner, ExecNodeConfig config) {
-        codegenInput =
-                new OperatorFusionCodegenInput(
-                        new CodeGeneratorContext(
-                                config, planner.getFlinkContext().getClassLoader()),
-                        multipleInputId,
-                        (RowType) getOutputType());
-        return codegenInput;
     }
 }

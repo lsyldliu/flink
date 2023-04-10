@@ -275,6 +275,7 @@ class OperatorFusionCodegenHashJoin(
       val expr = exprCodeGenerator.generateExpression(joinSpec.getNonEquiCondition.get)
       val skipRow = s"${expr.nullTerm} || !${expr.resultTerm}"
       s"""
+         |// generate join condition
          |${expr.getCode}
          |if (!($skipRow))
        """.stripMargin

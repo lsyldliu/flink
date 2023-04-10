@@ -140,36 +140,29 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
             for (ExecEdge inputEdge : originalEdges) {
                 int multipleInputId = i + 1;
                 BatchExecNode<RowData> source = (BatchExecNode<RowData>) inputEdge.getSource();
-                if (!(source instanceof BatchExecExchange)) {
-                    BatchExecInputAdapter inputAdapter =
-                            new BatchExecInputAdapter(
-                                    TableConfig.getDefault(),
-                                    InputProperty.builder().priority(readOrders[i]).build(),
-                                    source.getOutputType(),
-                                    "BatchInputAdapter");
-                    inputAdapter.setInputEdges(
-                            Collections.singletonList(
-                                    ExecEdge.builder()
-                                            .source(source)
-                                            .target(inputAdapter)
-                                            .build()));
+                BatchExecInputAdapter inputAdapter =
+                        new BatchExecInputAdapter(
+                                TableConfig.getDefault(),
+                                InputProperty.builder().priority(readOrders[i]).build(),
+                                source.getOutputType(),
+                                "BatchInputAdapter");
+                inputAdapter.setInputEdges(
+                        Collections.singletonList(
+                                ExecEdge.builder().source(source).target(inputAdapter).build()));
 
-                    BatchExecNode<RowData> target = (BatchExecNode<RowData>) inputEdge.getTarget();
-                    int targetInputIdx = 0;
-                    for (ExecEdge targetInputEdge : target.getInputEdges()) {
-                        if (inputEdge.equals(targetInputEdge)) {
-                            target.replaceInputEdge(
-                                    targetInputIdx,
-                                    ExecEdge.builder().source(inputAdapter).target(target).build());
-                        }
-                        targetInputIdx++;
+                BatchExecNode<RowData> target = (BatchExecNode<RowData>) inputEdge.getTarget();
+                int targetInputIdx = 0;
+                for (ExecEdge targetInputEdge : target.getInputEdges()) {
+                    if (inputEdge.equals(targetInputEdge)) {
+                        target.replaceInputEdge(
+                                targetInputIdx,
+                                ExecEdge.builder().source(inputAdapter).target(target).build());
+                        break;
                     }
-                    codegenSupportInputs.add(
-                            inputAdapter.getInputCodegenOp(multipleInputId, planner, config));
-                } else {
-                    codegenSupportInputs.add(
-                            source.getInputCodegenOp(multipleInputId, planner, config));
+                    targetInputIdx++;
                 }
+                codegenSupportInputs.add(
+                        inputAdapter.getInputCodegenOp(multipleInputId, planner, config));
                 // The input id and read order
                 multipleInputSpecs.add(new MultipleInputSpec(multipleInputId, readOrders[i]));
                 i++;
