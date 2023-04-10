@@ -348,6 +348,7 @@ public class BatchExecHashJoin extends ExecNodeBase<RowData>
                         joinType.isRightOuter(),
                         joinType == FlinkJoinType.SEMI,
                         joinType == FlinkJoinType.ANTI);
-        return LongHashJoinGenerator.support(hashJoinType, keyType, joinSpec.getFilterNulls());
+        return LongHashJoinGenerator.codegenSupport(
+                hashJoinType, keyType, joinSpec.getFilterNulls());
     }
 }

@@ -161,11 +161,13 @@ class CodeGeneratorContext(val tableConfig: ReadableConfig, val classLoader: Cla
   // Getter
   // ---------------------------------------------------------------------------------
 
-  def getReusableInputExprs(inputTerm: String, index: Int): GeneratedExpression =
-    reusableInputExprs.get(inputTerm) match {
-      case Some(exprs) => exprs(index)
-      case None => null
+  def getReusableInputExprs(inputTerm: String, index: Int): GeneratedExpression = {
+    val exprs = reusableInputExprs.get(inputTerm).getOrElse(null)
+    if (exprs != null && exprs != mutable.Seq.empty && exprs(index) != null) {
+      return exprs(index)
     }
+    null
+  }
 
   def getReusableInputUnboxingExprs(inputTerm: String, index: Int): Option[GeneratedExpression] =
     reusableInputUnboxingExprs.get((inputTerm, index))

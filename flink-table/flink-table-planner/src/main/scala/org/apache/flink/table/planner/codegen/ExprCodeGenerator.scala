@@ -91,10 +91,15 @@ class ExprCodeGenerator(
   def bindInputWithExpr(
       inputType: LogicalType,
       inputExprs: Seq[GeneratedExpression],
-      inputTerm: String = DEFAULT_INPUT1_TERM,
+      inputTerm: String,
       inputFieldMapping: Option[Array[Int]] = None): ExprCodeGenerator = {
-    bindInput(inputType, inputTerm, inputFieldMapping)
-    ctx.addReusableInputExprs(inputTerm, inputExprs)
+    val wrapInputTerm = if (inputTerm == null) {
+      newName("input1")
+    } else {
+      inputTerm
+    }
+    bindInput(inputType, wrapInputTerm, inputFieldMapping)
+    ctx.addReusableInputExprs(wrapInputTerm, inputExprs)
     this
   }
 
@@ -119,10 +124,15 @@ class ExprCodeGenerator(
   def bindSecondInputWithExpr(
       inputType: LogicalType,
       inputExprs: Seq[GeneratedExpression],
-      inputTerm: String = DEFAULT_INPUT2_TERM,
+      inputTerm: String,
       inputFieldMapping: Option[Array[Int]] = None): ExprCodeGenerator = {
-    bindSecondInput(inputType, inputTerm, inputFieldMapping)
-    ctx.addReusableInputExprs(inputTerm, inputExprs)
+    val wrapInputTerm = if (inputTerm == null) {
+      newName("input2")
+    } else {
+      inputTerm
+    }
+    bindSecondInput(inputType, wrapInputTerm, inputFieldMapping)
+    ctx.addReusableInputExprs(wrapInputTerm, inputExprs)
     this
   }
 
@@ -212,6 +222,51 @@ class ExprCodeGenerator(
       case None => Seq() // add nothing
     }
     input1AccessExprs ++ input2AccessExprs
+  }
+
+  /** Generates fields expression from input row. */
+  def generateInputAccessExprs(inputId: Int): Seq[GeneratedExpression] = {
+    val inputAccessExprs: Seq[GeneratedExpression] = if (inputId == 1) {
+      input1Mapping.map {
+        case TimeIndicatorTypeInfo.ROWTIME_STREAM_MARKER |
+            TimeIndicatorTypeInfo.ROWTIME_BATCH_MARKER =>
+          throw new TableException("Rowtime extraction expression missing. Please report a bug.")
+        case TimeIndicatorTypeInfo.PROCTIME_STREAM_MARKER =>
+          // attribute is proctime indicator.
+          // we use a null literal and generate a timestamp when we need it.
+          generateNullLiteral(new LocalZonedTimestampType(true, TimestampKind.PROCTIME, 3))
+        case TimeIndicatorTypeInfo.PROCTIME_BATCH_MARKER =>
+          // attribute is proctime field in a batch query.
+          // it is initialized with the current time.
+          generateCurrentTimestamp(ctx)
+        case idx =>
+          // get type of result field
+          generateInputAccess(
+            ctx,
+            input1Type,
+            input1Term,
+            idx,
+            nullableInput,
+            opFusionCodegen = opFusionCodegen)
+      }
+    } else {
+      input2Type match {
+        case Some(ti) =>
+          input2Mapping
+            .map(
+              idx =>
+                generateInputAccess(
+                  ctx,
+                  ti,
+                  input2Term.get,
+                  idx,
+                  nullableInput,
+                  opFusionCodegen = opFusionCodegen))
+            .toSeq
+        case None => Seq() // add nothing
+      }
+    }
+    inputAccessExprs
   }
 
   /**

@@ -20,7 +20,7 @@ package org.apache.flink.table.planner.codegen
 import org.apache.flink.core.memory.ManagedMemoryUseCase
 import org.apache.flink.streaming.api.operators.{AbstractStreamOperatorV2, BoundedMultiInput, Input, InputSelectable, InputSelection, MultipleInputStreamOperator, StreamOperatorParameters}
 import org.apache.flink.streaming.runtime.tasks.StreamTask
-import org.apache.flink.table.data.RowData
+import org.apache.flink.table.data.{BoxedWrapperRowData, RowData}
 import org.apache.flink.table.planner.codegen.CodeGenUtils.{className, newName}
 import org.apache.flink.table.planner.codegen.OperatorCodeGenerator.{addReuseOutElement, generateCollect, OUT_ELEMENT, STREAM_RECORD}
 import org.apache.flink.table.planner.utils.Logging
@@ -54,11 +54,12 @@ class OperatorFusionCodegenOutput(operatorCtx: CodeGeneratorContext)
   override def doConsumeProcess(
       inputId: Int,
       input: Seq[GeneratedExpression],
-      row: GeneratedExpression): String = {
+      row: String): String = {
     addReuseOutElement(operatorCtx)
+    val rowVar = prepareInputRowVar(1, classOf[BoxedWrapperRowData], row, input)
     s"""
-       |${row.getCode}
-       |${generateCollect(row.resultTerm)}
+       |${rowVar.getCode}
+       |${generateCollect(rowVar.resultTerm)}
        |""".stripMargin
   }
 

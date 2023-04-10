@@ -19,6 +19,7 @@
 package org.apache.flink.table.planner.codegen
 
 import org.apache.flink.table.data.TimestampData
+import org.apache.flink.table.data.binary.BinaryRowData
 import org.apache.flink.table.planner.codegen.CodeGenUtils.{newName, newNames, BINARY_ROW, ROW_DATA}
 import org.apache.flink.table.planner.codegen.LongHashJoinGenerator.{genGetLongKey, genProjection}
 import org.apache.flink.table.planner.plan.nodes.exec.spec.JoinSpec
@@ -111,15 +112,15 @@ class OperatorFusionCodegenHashJoin(
   override def doConsumeProcess(
       inputId: Int,
       input: Seq[GeneratedExpression],
-      row: GeneratedExpression): String = {
+      row: String): String = {
     // only probe side will call the consumeProcess method to consume the output record
     if (leftIsBuild) {
       if (inputId == 1) {
-        codegenBuild(input, row)
+        codegenBuild(inputId, input, row)
       } else {
         hashJoinType match {
           case HashJoinType.INNER =>
-            codegenInnerProbe(input)
+            codegenInnerProbe(1, input)
           case _ =>
             throw new UnsupportedOperationException(
               s"Multiple fusion codegen doesn't support $hashJoinType now.")
@@ -129,35 +130,40 @@ class OperatorFusionCodegenHashJoin(
       if (inputId == 1) {
         hashJoinType match {
           case HashJoinType.INNER =>
-            codegenInnerProbe(input)
+            codegenInnerProbe(2, input)
           case _ =>
             throw new UnsupportedOperationException(
               s"Multiple fusion codegen doesn't support $hashJoinType now.")
         }
       } else {
-        codegenBuild(input, row)
+        codegenBuild(inputId, input, row)
       }
     }
   }
 
-  private def codegenBuild(input: Seq[GeneratedExpression], row: GeneratedExpression): String = {
-    val (nullCheckBuildCode, nullCheckBuildTerm) =
+  private def codegenBuild(inputId: Int, input: Seq[GeneratedExpression], row: String): String = {
+    val (nullCheckBuildCode, nullCheckBuildTerm) = {
       genAnyNullsInKeys(buildKeys, input)
+    }
+    val buildInputRow = prepareInputRowVar(inputId, classOf[BinaryRowData], row, input)
     s"""
        |$nullCheckBuildCode
        |if (!$nullCheckBuildTerm) {
-       |  ${row.getCode}
-       |  $hashTableTerm.putBuildRow(${row.resultTerm} instanceof $BINARY_ROW ?
-       |    ($BINARY_ROW) ${row.resultTerm} : $buildToBinaryRow.apply(${row.resultTerm}));
+       |  ${buildInputRow.getCode}
+       |  $hashTableTerm.putBuildRow(($BINARY_ROW) ${buildInputRow.resultTerm});
        |}
        """.stripMargin
   }
 
-  private def codegenInnerProbe(input: Seq[GeneratedExpression]): String = {
+  private def codegenInnerProbe(buildInputId: Int, input: Seq[GeneratedExpression]): String = {
     val (keyEv, anyNull) = genStreamSideJoinKey(keyType, probeKeys, input)
     val keyCode = keyEv.getCode
-    val (matched, checkCondition, buildVars) = getJoinCondition(buildType)
-    val resultVars = input ++ buildVars
+    val (matched, checkCondition, buildVars) = getJoinCondition(buildInputId, buildType)
+    val resultVars = if (leftIsBuild) {
+      buildVars ++ input
+    } else {
+      input ++ buildVars
+    }
     val buildIterTerm = newName("buildIter")
     // val probeInputRow = prepareInputRowVar(inputId, row.resultTerm, input)
     s"""
@@ -259,10 +265,13 @@ class OperatorFusionCodegenHashJoin(
       anyNullTerm)
   }
 
-  protected def getJoinCondition(buildType: RowType): (String, String, Seq[GeneratedExpression]) = {
+  protected def getJoinCondition(
+      buildInputId: Int,
+      buildType: RowType): (String, String, Seq[GeneratedExpression]) = {
     val buildRow = newName("buildRow")
-    val buildVars = genBuildSideVars(buildRow, buildType)
+    val buildVars = genBuildSideVars(buildInputId, buildRow, buildType)
     val checkCondition = if (joinSpec.getNonEquiCondition.isPresent) {
+      // bind the build row name again
       val expr = exprCodeGenerator.generateExpression(joinSpec.getNonEquiCondition.get)
       val skipRow = s"${expr.nullTerm} || !${expr.resultTerm}"
       s"""
@@ -276,16 +285,19 @@ class OperatorFusionCodegenHashJoin(
   }
 
   /** Generates the code for variables of build side. */
-  protected def genBuildSideVars(buildRow: String, buildType: RowType): Seq[GeneratedExpression] = {
-    val exprGenerator = new ExprCodeGenerator(
-      new CodeGeneratorContext(operatorCtx.tableConfig, operatorCtx.classLoader),
-      false,
-      true)
-      .bindInput(buildType, inputTerm = buildRow)
+  protected def genBuildSideVars(
+      buildInputId: Int,
+      buildRow: String,
+      buildType: RowType): Seq[GeneratedExpression] = {
+    if (buildInputId == 1) {
+      exprCodeGenerator.bindInputWithExpr(buildType, null, inputTerm = buildRow)
+    } else {
+      exprCodeGenerator.bindSecondInputWithExpr(buildType, null, inputTerm = buildRow)
+    }
 
     hashJoinType match {
       case HashJoinType.INNER =>
-        exprGenerator.generateInputAccessExprs()
+        exprCodeGenerator.generateInputAccessExprs(buildInputId)
       case _ =>
         throw new IllegalArgumentException(
           s"JoinCodegenSupport.genBuildSideVars should not take $hashJoinType as the JoinType")

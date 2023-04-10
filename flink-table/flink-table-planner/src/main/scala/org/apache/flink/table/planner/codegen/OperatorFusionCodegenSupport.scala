@@ -18,8 +18,7 @@
 
 package org.apache.flink.table.planner.codegen
 
-import org.apache.flink.table.data.BoxedWrapperRowData
-import org.apache.flink.table.data.binary.BinaryRowData
+import org.apache.flink.table.data.{BoxedWrapperRowData, RowData}
 import org.apache.flink.table.planner.codegen.CodeGenUtils.{newName, DEFAULT_OUT_RECORD_WRITER_TERM}
 import org.apache.flink.table.planner.codegen.GeneratedExpression.{NEVER_NULL, NO_CODE}
 import org.apache.flink.table.types.logical.RowType
@@ -126,28 +125,21 @@ trait OperatorFusionCodegenSupport {
       assert(row != null, "outputVars and row can't both be null.")
       getExprCodeGenerator.generateInputAccessExprs()
     }
-    val rowVar = prepareRowVar(row, outputVars)
 
     // we need to bind out ctx before call its consume to reuse the input expression
     if (inputIdOfOutputNode == 1) {
-      output.getExprCodeGenerator.bindInputWithExpr(getOutputType, inputVars, rowVar.resultTerm)
+      output.getExprCodeGenerator.bindInputWithExpr(getOutputType, inputVars, row)
     } else {
-      output.getExprCodeGenerator.bindSecondInputWithExpr(
-        getOutputType,
-        inputVars,
-        rowVar.resultTerm)
+      output.getExprCodeGenerator.bindSecondInputWithExpr(getOutputType, inputVars, row)
     }
 
     // we always pass column vars and row var to parent simultaneously, the output decide to use which one
     s"""
-       |${output.doConsumeProcess(inputIdOfOutputNode, inputVars, rowVar)}
+       |${output.doConsumeProcess(inputIdOfOutputNode, inputVars, row)}
      """.stripMargin
   }
 
-  def doConsumeProcess(
-      inputId: Int,
-      input: Seq[GeneratedExpression],
-      row: GeneratedExpression): String = {
+  def doConsumeProcess(inputId: Int, input: Seq[GeneratedExpression], row: String): String = {
     throw new UnsupportedOperationException
   }
 
@@ -184,16 +176,17 @@ trait OperatorFusionCodegenSupport {
 
   def prepareInputRowVar(
       inputId: Int,
+      rowTypeClazz: Class[_ <: RowData],
       row: String,
       colVars: Seq[GeneratedExpression]): GeneratedExpression = {
-    val inputOp = inputs(inputId)
+    val inputOp = inputs(inputId - 1)
     if (row != null) {
       new GeneratedExpression(row, NEVER_NULL, NO_CODE, inputOp.getOutputType)
     } else {
       inputOp.getExprCodeGenerator.generateResultExpression(
         colVars,
         inputOp.getOutputType,
-        classOf[BinaryRowData],
+        rowTypeClazz,
         newName(variablePrefix + "input"),
         Some(newName(variablePrefix + "inputWriter"))
       )

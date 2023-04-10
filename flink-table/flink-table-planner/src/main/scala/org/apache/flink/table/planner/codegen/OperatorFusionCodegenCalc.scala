@@ -53,7 +53,7 @@ class OperatorFusionCodegenCalc(
   override def doConsumeProcess(
       inputId: Int,
       input: Seq[GeneratedExpression],
-      row: GeneratedExpression): String = {
+      row: String): String = {
     val onlyFilter = projection.lengthCompare(inputs(0).getOutputType.getFieldCount) == 0 &&
       projection.zipWithIndex.forall {
         case (rexNode, index) =>
@@ -81,7 +81,6 @@ class OperatorFusionCodegenCalc(
            |""".stripMargin
       } else { // both filter and projection
         // if any filter conditions, projection code will enter an new scope
-        // TODO filter 已经计算过的表达式，参考spark，在project中无需再重复计算，因此需要把其input表达式code置为空，不然会存在变量重复定义问题
         val projectionExprs = projection.map(getExprCodeGenerator.generateExpression)
         s"""
            |${filterCondition.getCode}

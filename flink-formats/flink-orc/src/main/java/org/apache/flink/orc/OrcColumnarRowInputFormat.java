@@ -132,13 +132,7 @@ public class OrcColumnarRowInputFormat<BatchT, SplitT extends FileSourceSplit>
             // because they point to the same data arrays internally design
             int batchSize = orcBatch.size();
             flinkColumnBatch.setNumRows(batchSize);
-            if (flinkColumnBatch.getArity() == 5) {
-                result.set(batchSize, batchSize - 1, startingOffset, batchSize - 1);
-            } else {
-                result.set(batchSize, startingOffset, 0);
-            }
-            // result.set(batchSize, startingOffset, 0);
-
+            result.set(batchSize, startingOffset, 0);
             return result;
         }
     }

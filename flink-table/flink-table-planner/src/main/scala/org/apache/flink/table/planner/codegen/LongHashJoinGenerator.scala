@@ -59,6 +59,30 @@ object LongHashJoinGenerator {
     }
   }
 
+  def codegenSupport(
+      joinType: HashJoinType,
+      keyType: RowType,
+      filterNulls: Array[Boolean]): Boolean = {
+    (joinType == HashJoinType.INNER) &&
+    filterNulls.forall(b => b) &&
+    keyType.getFieldCount == 1 && {
+      keyType.getTypeAt(0).getTypeRoot match {
+        case BIGINT | INTEGER | SMALLINT | TINYINT | FLOAT | DOUBLE | DATE |
+            TIME_WITHOUT_TIME_ZONE =>
+          true
+        case TIMESTAMP_WITHOUT_TIME_ZONE =>
+          val timestampType = keyType.getTypeAt(0).asInstanceOf[TimestampType]
+          TimestampData.isCompact(timestampType.getPrecision)
+        case TIMESTAMP_WITH_LOCAL_TIME_ZONE =>
+          val lzTs = keyType.getTypeAt(0).asInstanceOf[LocalZonedTimestampType]
+          TimestampData.isCompact(lzTs.getPrecision)
+        case _ => false
+      }
+      // TODO decimal and multiKeys support.
+      // TODO All HashJoinType support.
+    }
+  }
+
   def genGetLongKey(keyType: RowType, keyMapping: Array[Int], rowTerm: String): String = {
     val singleType = keyType.getTypeAt(0)
     val getCode = rowFieldReadAccess(keyMapping(0), rowTerm, singleType)
