@@ -62,15 +62,15 @@ object SearchOperatorGen {
       .orElseThrow(
         () => new CodeGenException(s"Unable to find common type of $target and $sargLiteral."))
 
-    val needle = generateCast(
-      ctx,
-      target,
-      commonType,
-      nullOnFailure = false
-    )
-
     // In case the search is among points we use the hashset implementation
     if (sarg.isPoints || sarg.isComplementedPoints) {
+      val needle = generateCast(
+        ctx,
+        target,
+        commonType,
+        nullOnFailure = false
+      )
+
       val rangeSet = if (sarg.isPoints) sarg.rangeSet else sarg.rangeSet.complement()
       val haystack = rangeSet
         .asRanges()

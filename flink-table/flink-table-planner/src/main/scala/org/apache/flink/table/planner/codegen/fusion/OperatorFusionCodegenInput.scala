@@ -16,9 +16,10 @@
  * limitations under the License.
  */
 
-package org.apache.flink.table.planner.codegen
+package org.apache.flink.table.planner.codegen.fusion
 
 import org.apache.flink.streaming.api.operators.AbstractInput
+import org.apache.flink.table.planner.codegen.{CodeGeneratorContext, ExprCodeGenerator}
 import org.apache.flink.table.planner.codegen.CodeGenUtils.{boxedTypeTermForType, className, DEFAULT_INPUT_TERM}
 import org.apache.flink.table.planner.codegen.OperatorCodeGenerator.{ELEMENT, STREAM_RECORD}
 import org.apache.flink.table.types.logical.RowType

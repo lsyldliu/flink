@@ -22,7 +22,7 @@ import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.streaming.api.transformations.StreamExchangeMode;
 import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.delegation.Planner;
-import org.apache.flink.table.planner.codegen.OperatorFusionCodegenSupport;
+import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenSupport;
 import org.apache.flink.table.types.logical.LogicalType;
 
 import java.util.Arrays;

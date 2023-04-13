@@ -16,11 +16,13 @@
  * limitations under the License.
  */
 
-package org.apache.flink.table.planner.codegen
+package org.apache.flink.table.planner.codegen.fusion
+
 import org.apache.flink.core.memory.ManagedMemoryUseCase
 import org.apache.flink.streaming.api.operators.{AbstractStreamOperatorV2, BoundedMultiInput, Input, InputSelectable, InputSelection, MultipleInputStreamOperator, StreamOperatorParameters}
 import org.apache.flink.streaming.runtime.tasks.StreamTask
 import org.apache.flink.table.data.{BoxedWrapperRowData, RowData}
+import org.apache.flink.table.planner.codegen.{CodeGeneratorContext, ExprCodeGenerator, GeneratedExpression}
 import org.apache.flink.table.planner.codegen.CodeGenUtils.{className, newName}
 import org.apache.flink.table.planner.codegen.OperatorCodeGenerator.{addReuseOutElement, generateCollect, OUT_ELEMENT, STREAM_RECORD}
 import org.apache.flink.table.planner.utils.Logging
@@ -186,7 +188,7 @@ class OperatorFusionCodegenOutput(operatorCtx: CodeGeneratorContext)
       }
     """.stripMargin
 
-    println(operatorCode)
+    // println(operatorCode)
 
     LOG.debug(s"Compiling BatchMultipleInputStreamOperator Code:\n$operatorName")
     LOG.trace(s"Code: \n$operatorCode")

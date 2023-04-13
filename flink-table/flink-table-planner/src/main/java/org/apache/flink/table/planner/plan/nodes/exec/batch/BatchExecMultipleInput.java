@@ -26,8 +26,8 @@ import org.apache.flink.streaming.api.transformations.MultipleInputTransformatio
 import org.apache.flink.table.api.TableConfig;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
-import org.apache.flink.table.planner.codegen.OperatorFusionCodegenOutput;
-import org.apache.flink.table.planner.codegen.OperatorFusionCodegenSupport;
+import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenOutput;
+import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenSupport;
 import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
@@ -53,7 +53,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import scala.Tuple2;
@@ -94,6 +97,11 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
 
     private static final Logger LOG = LoggerFactory.getLogger(BatchExecMultipleInput.class);
 
+    private static final AtomicLong totalMultipleNode = new AtomicLong(0);
+    private static final AtomicLong codegenMultipleNode = new AtomicLong(0);
+    private static final Map<Integer, Integer> nodeInputMap = new ConcurrentHashMap<>();
+    private static final Map<Integer, Integer> codegenNodeInputMap = new ConcurrentHashMap<>();
+
     private final ExecNode<?> rootNode;
     private final List<ExecEdge> originalEdges;
 
@@ -129,9 +137,13 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
                         .mapToInt(i -> i)
                         .toArray();
 
+        totalMultipleNode.incrementAndGet();
+        int inputCnt = inputTransforms.size();
+        nodeInputMap.put(inputCnt, nodeInputMap.getOrDefault(inputCnt, 0) + 1);
         MultipleInputTransformation<RowData> multipleInputTransform = null;
         long memoryBytes = 0;
         boolean multipleCodegenEnabled = config.get(TABLE_EXEC_MULTIPLE_CODEGEN_ENABLED);
+        long codegenStartTime = System.currentTimeMillis();
         if (multipleCodegenEnabled && supportMultipleCodegen(rootNode, originalEdges)) {
             // multiple operator fusion codegen
             final List<MultipleInputSpec> multipleInputSpecs = new ArrayList<>();
@@ -191,6 +203,13 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
                 multipleInputTransform.setMaxParallelism(parallelismPair.getRight());
             }
             memoryBytes = (long) multipleOperatorTuple._2;
+
+            System.out.println(
+                    String.format(
+                            "Multiple operators fusion codegen spent %sms.",
+                            System.currentTimeMillis() - codegenStartTime));
+            codegenMultipleNode.incrementAndGet();
+            codegenNodeInputMap.put(inputCnt, codegenNodeInputMap.getOrDefault(inputCnt, 0) + 1);
         } else {
             final Transformation<?> outputTransform = rootNode.translateToPlan(planner);
 
@@ -238,7 +257,14 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
         ExecNodeUtil.setManagedMemoryWeight(multipleInputTransform, memoryBytes);
         // set chaining strategy for source chaining
         multipleInputTransform.setChainingStrategy(ChainingStrategy.HEAD_WITH_SOURCES);
-
+        System.out.println(
+                String.format(
+                        "Total BatchExecMultiInput node num: %s, support codegen node num: %s.",
+                        totalMultipleNode.get(), codegenMultipleNode.get()));
+        System.out.println(
+                String.format(
+                        "Total BatchExecMultiInput node distribution: %s, support codegen node distribution: %s.",
+                        nodeInputMap, codegenNodeInputMap));
         return multipleInputTransform;
     }
 

@@ -16,9 +16,10 @@
  * limitations under the License.
  */
 
-package org.apache.flink.table.planner.codegen
+package org.apache.flink.table.planner.codegen.fusion
 
 import org.apache.flink.table.api.TableException
+import org.apache.flink.table.planner.codegen.{CodeGeneratorContext, ExprCodeGenerator, GeneratedExpression}
 import org.apache.flink.table.types.logical.RowType
 
 import org.apache.calcite.rex.{RexInputRef, RexNode}

@@ -16,10 +16,11 @@
  * limitations under the License.
  */
 
-package org.apache.flink.table.planner.codegen
+package org.apache.flink.table.planner.codegen.fusion
 
 import org.apache.flink.table.data.TimestampData
 import org.apache.flink.table.data.binary.BinaryRowData
+import org.apache.flink.table.planner.codegen.{CodeGeneratorContext, ExprCodeGenerator, GeneratedExpression}
 import org.apache.flink.table.planner.codegen.CodeGenUtils.{newName, newNames, BINARY_ROW, ROW_DATA}
 import org.apache.flink.table.planner.codegen.LongHashJoinGenerator.{genGetLongKey, genProjection}
 import org.apache.flink.table.planner.plan.nodes.exec.spec.JoinSpec

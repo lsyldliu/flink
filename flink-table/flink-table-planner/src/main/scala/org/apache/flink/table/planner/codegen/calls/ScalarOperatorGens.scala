@@ -663,15 +663,15 @@ object ScalarOperatorGens {
       // Unknown && False -> False
       // Unknown && Unknown -> Unknown
       s"""
+         |// evaluate left expr
          |${left.getCode}
-         |
+         |// evaluate right expr
+         |${right.getCode}
          |boolean $resultTerm = false;
          |boolean $nullTerm = false;
          |if (!${left.nullTerm} && !${left.resultTerm}) {
          |  // left expr is false, skip right expr
          |} else {
-         |  ${right.getCode}
-         |
          |  if (!${left.nullTerm} && !${right.nullTerm}) {
          |    $resultTerm = ${left.resultTerm} && ${right.resultTerm};
          |    $nullTerm = false;
@@ -718,14 +718,12 @@ object ScalarOperatorGens {
       // Unknown || Unknown -> Unknown
       s"""
          |${left.getCode}
-         |
+         |${right.getCode}
          |boolean $resultTerm = true;
          |boolean $nullTerm = false;
          |if (!${left.nullTerm} && ${left.resultTerm}) {
          |  // left expr is true, skip right expr
          |} else {
-         |  ${right.getCode}
-         |
          |  if (!${left.nullTerm} && !${right.nullTerm}) {
          |    $resultTerm = ${left.resultTerm} || ${right.resultTerm};
          |    $nullTerm = false;

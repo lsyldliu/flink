@@ -392,7 +392,7 @@ public class MultipleInputNodeCreationProcessor implements ExecNodeGraphProcesso
             } else if (wrapper.inputs.size() == 1) {
                 // optimization 6. operators with only 1 input are not allowed to be the root,
                 // as their chaining will be handled by operator chains.
-                // wrapper.group.removeRoot();
+                wrapper.group.removeRoot();
             }
         }
     }
