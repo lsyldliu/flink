@@ -87,6 +87,20 @@ class ExprCodeGenerator(
     this
   }
 
+  def bindInputAndResetSecond(
+      inputType: LogicalType,
+      inputTerm: String = DEFAULT_INPUT1_TERM,
+      inputFieldMapping: Option[Array[Int]] = None): ExprCodeGenerator = {
+    input1Type = inputType
+    input1Term = inputTerm
+    input1FieldMapping = inputFieldMapping
+    // reset second input for whole stage codegen
+    input2Type = None
+    input2Term = None
+    input2FieldMapping = None
+    this
+  }
+
   /** Bind the input information, should be called before generating expression. */
   def bindInputWithExpr(
       inputType: LogicalType,
@@ -134,6 +148,14 @@ class ExprCodeGenerator(
     bindSecondInput(inputType, wrapInputTerm, inputFieldMapping)
     ctx.addReusableInputExprs(wrapInputTerm, inputExprs)
     this
+  }
+
+  def getInput1Term(): String = {
+    input1Term
+  }
+
+  def getInput2Term(): Option[String] = {
+    input2Term
   }
 
   /**
@@ -555,8 +577,7 @@ class ExprCodeGenerator(
          |if (${refExpr.nullTerm}) {
          |  $resultTerm = $defaultValue;
          |  $nullTerm = true;
-         |}
-         |else {
+         |} else {
          |  ${fieldAccessExpr.getCode}
          |  $resultTerm = ${fieldAccessExpr.resultTerm};
          |  $nullTerm = ${fieldAccessExpr.nullTerm};
@@ -587,6 +608,7 @@ class ExprCodeGenerator(
   }
 
   def visitDistinctKeyVariable(value: RexDistinctKeyVariable): GeneratedExpression = {
+    // this is used for streaming mode, so we don't need care about it currently
     val inputExpr = ctx.getReusableInputUnboxingExprs(input1Term, 0) match {
       case Some(expr) => expr
       case None =>

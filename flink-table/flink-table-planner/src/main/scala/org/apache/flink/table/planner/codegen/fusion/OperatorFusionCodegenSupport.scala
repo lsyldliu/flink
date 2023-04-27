@@ -30,10 +30,12 @@ import scala.collection.mutable.ListBuffer
 trait OperatorFusionCodegenSupport {
 
   /** Prefix used in the current operator's variable names. */
-  private def variablePrefix: String = this match {
+  protected def variablePrefix: String = this match {
     case _: OperatorFusionCodegenInput => "input_"
     case _: OperatorFusionCodegenCalc => "calc_"
     case _: OperatorFusionCodegenHashJoin => "hj_"
+    case _: OperatorFusionCodegenHashAgg => "hashagg_"
+    case _: OperatorFusionCodegenLocalHashAgg => "localagg_"
     case _: OperatorFusionCodegenOutput => "out_"
   }
 
@@ -47,6 +49,10 @@ trait OperatorFusionCodegenSupport {
    * operator, depending on the side of the source, input id may be 1 (left side) or 2 (right side).
    */
   protected var inputIdOfOutputNode = 1
+
+  protected var cachedDoConsumeFunction: String = null
+
+  protected var inputRowTerm: String = newName(variablePrefix + "inputRow")
 
   val inputs: ListBuffer[OperatorFusionCodegenSupport] =
     new ListBuffer[OperatorFusionCodegenSupport]()
@@ -62,6 +68,12 @@ trait OperatorFusionCodegenSupport {
   def getExprCodeGenerator: ExprCodeGenerator
 
   def getManagedMemory: Long = 0L
+
+  /**
+   * Like HashJoin operator, it emit records in process and endInput method, so we need to wrap the
+   * consumed code to a seperated method.
+   */
+  def needConstructDoConsumeFunction: Boolean = false
 
   final def setManagedMemFraction(managedMemoryFraction: Double) =
     this.managedMemoryFraction = managedMemoryFraction
@@ -124,6 +136,7 @@ trait OperatorFusionCodegenSupport {
       outputVars
     } else {
       assert(row != null, "outputVars and row can't both be null.")
+      // this should use the row to generate field expr directly instead of using getExprCodeGenerator which is not corrected way
       getExprCodeGenerator.generateInputAccessExprs()
     }
 
@@ -175,7 +188,7 @@ trait OperatorFusionCodegenSupport {
     }
   }
 
-  def prepareInputRowVar(
+  final def prepareInputRowVar(
       inputId: Int,
       rowTypeClazz: Class[_ <: RowData],
       row: String,
@@ -188,7 +201,7 @@ trait OperatorFusionCodegenSupport {
         colVars,
         inputOp.getOutputType,
         rowTypeClazz,
-        newName(variablePrefix + "inputRow"),
+        inputRowTerm,
         Some(newName(variablePrefix + "inputWriter"))
       )
     }

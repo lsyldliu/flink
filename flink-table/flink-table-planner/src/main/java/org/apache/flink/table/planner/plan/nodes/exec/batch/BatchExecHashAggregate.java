@@ -26,6 +26,9 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
 import org.apache.flink.table.planner.codegen.agg.batch.AggWithoutKeysCodeGenerator;
 import org.apache.flink.table.planner.codegen.agg.batch.HashAggCodeGenerator;
+import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenHashAgg;
+import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenLocalHashAgg;
+import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenSupport;
 import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
@@ -47,6 +50,7 @@ import org.apache.calcite.rel.core.AggregateCall;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.stream.Stream;
 
 /** Batch {@link ExecNode} for hash-based aggregate operator. */
 public class BatchExecHashAggregate extends ExecNodeBase<RowData>
@@ -59,6 +63,8 @@ public class BatchExecHashAggregate extends ExecNodeBase<RowData>
     private final boolean isMerge;
     private final boolean isFinal;
     private final boolean supportAdaptiveLocalHashAgg;
+
+    private OperatorFusionCodegenSupport hashAgg;
 
     public BatchExecHashAggregate(
             ReadableConfig tableConfig,
@@ -162,5 +168,69 @@ public class BatchExecHashAggregate extends ExecNodeBase<RowData>
 
     public boolean isFinal() {
         return isFinal;
+    }
+
+    @Override
+    public boolean supportMultipleCodegen() {
+        // We don't support operator fusion codegen when aggCalls has filter now
+        return Stream.of(aggCalls).noneMatch(AggregateCall::hasFilter);
+    }
+
+    @Override
+    protected OperatorFusionCodegenSupport translateToCodegenOpInternal(
+            PlannerBase planner, ExecNodeConfig config) {
+        OperatorFusionCodegenSupport input = getInputEdges().get(0).translateToCodegenOp(planner);
+        final RowType outputRowType = (RowType) getOutputType();
+        final CodeGeneratorContext ctx =
+                new CodeGeneratorContext(config, planner.getFlinkContext().getClassLoader());
+        final AggregateInfoList aggInfos =
+                AggregateUtil.transformToBatchAggregateInfoList(
+                        planner.getTypeFactory(),
+                        aggInputRowType,
+                        JavaScalaConversionUtil.toScala(Arrays.asList(aggCalls)),
+                        null, // aggCallNeedRetractions
+                        null); // orderKeyIndexes
+
+        long managedMemory =
+                config.get(ExecutionConfigOptions.TABLE_EXEC_RESOURCE_HASH_AGG_MEMORY).getBytes();
+        if (grouping.length == 0) {
+            managedMemory = 0L;
+        }
+        int maxNumFileHandles =
+                config.get(ExecutionConfigOptions.TABLE_EXEC_SORT_MAX_NUM_FILE_HANDLES);
+        boolean compressionEnabled =
+                config.get(ExecutionConfigOptions.TABLE_EXEC_SPILL_COMPRESSION_ENABLED);
+        int compressionBlockSize =
+                (int)
+                        config.get(ExecutionConfigOptions.TABLE_EXEC_SPILL_COMPRESSION_BLOCK_SIZE)
+                                .getBytes();
+        if (isFinal) {
+            hashAgg =
+                    new OperatorFusionCodegenHashAgg(
+                            ctx,
+                            planner.createRelBuilder(),
+                            aggInfos,
+                            outputRowType,
+                            grouping,
+                            auxGrouping,
+                            isMerge,
+                            managedMemory,
+                            maxNumFileHandles,
+                            compressionEnabled,
+                            compressionBlockSize);
+        } else {
+            hashAgg =
+                    new OperatorFusionCodegenLocalHashAgg(
+                            ctx,
+                            planner.createRelBuilder(),
+                            aggInfos,
+                            outputRowType,
+                            grouping,
+                            auxGrouping,
+                            supportAdaptiveLocalHashAgg);
+        }
+
+        hashAgg.addInput(input);
+        return hashAgg;
     }
 }

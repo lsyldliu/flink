@@ -519,6 +519,259 @@ object HashAggCodeGenHelper {
     GeneratedExpression(currentAggBufferTerm, "false", code, aggBufferType)
   }
 
+  /** Generate codes which will init the empty agg buffer. */
+  def genReusableEmptyAggBuffer(
+      ctx: CodeGeneratorContext,
+      exprCodeGen: ExprCodeGenerator,
+      builder: RelBuilder,
+      inputTerm: String,
+      inputType: RowType,
+      auxGrouping: Array[Int],
+      aggInfos: Seq[AggregateInfo],
+      aggBufferType: RowType): GeneratedExpression = {
+    val converter = new ExpressionConverter(builder)
+
+    val initAuxGroupingExprs = auxGrouping.map {
+      idx => GenerateUtils.generateFieldAccess(ctx, inputType, inputTerm, idx)
+    }
+
+    val initAggCallBufferExprs = aggInfos
+      .map(_.function.asInstanceOf[DeclarativeAggregateFunction])
+      .flatMap(_.initialValuesExpressions)
+      .map(_.accept(converter))
+      .map(exprCodeGen.generateExpression)
+
+    val initAggBufferExprs = initAuxGroupingExprs ++ initAggCallBufferExprs
+
+    // empty agg buffer and writer will be reused
+    val emptyAggBufferTerm = CodeGenUtils.newName("emptyAggBuffer")
+    val emptyAggBufferWriterTerm = CodeGenUtils.newName("emptyAggBufferWriterTerm")
+    exprCodeGen.generateResultExpression(
+      initAggBufferExprs,
+      aggBufferType,
+      classOf[BinaryRowData],
+      emptyAggBufferTerm,
+      Some(emptyAggBufferWriterTerm)
+    )
+  }
+
+  def genAggregateExpr(
+      isMerge: Boolean,
+      ctx: CodeGeneratorContext,
+      exprCodeGen: ExprCodeGenerator,
+      builder: RelBuilder,
+      inputType: RowType,
+      auxGrouping: Array[Int],
+      aggInfos: Seq[AggregateInfo],
+      argsMapping: Array[Array[(Int, LogicalType)]],
+      aggBuffMapping: Array[Array[(Int, LogicalType)]],
+      currentAggBufferTerm: String,
+      aggBufferRowType: RowType): GeneratedExpression = {
+    if (isMerge) {
+      genMergeAggBufferExpr(
+        ctx,
+        exprCodeGen,
+        builder,
+        inputType,
+        currentAggBufferTerm,
+        auxGrouping,
+        aggInfos,
+        argsMapping,
+        aggBuffMapping,
+        aggBufferRowType)
+    } else {
+      genAccumulateAggBufferExpr(
+        ctx,
+        exprCodeGen,
+        builder,
+        inputType,
+        currentAggBufferTerm,
+        auxGrouping,
+        aggInfos,
+        argsMapping,
+        aggBuffMapping,
+        aggBufferRowType)
+    }
+  }
+
+  /**
+   * Generate codes which will read input, accumulating aggregate buffers and updating the
+   * aggregation map
+   */
+  private[flink] def genAccumulateAggBufferExpr(
+      ctx: CodeGeneratorContext,
+      exprCodeGen: ExprCodeGenerator,
+      builder: RelBuilder,
+      inputType: RowType,
+      currentAggBufferTerm: String,
+      auxGrouping: Array[Int],
+      aggInfos: Seq[AggregateInfo],
+      argsMapping: Array[Array[(Int, LogicalType)]],
+      aggBuffMapping: Array[Array[(Int, LogicalType)]],
+      aggBufferType: RowType): GeneratedExpression = {
+    val converter = new ExpressionConverter(builder)
+
+    val bindRefOffset = inputType.getFieldCount
+    val accumulateExprsWithFilterArgs = aggInfos
+      .flatMap {
+        aggInfo =>
+          val aggBufferIdx = auxGrouping.length + aggInfo.aggIndex
+          val function = aggInfo.function.asInstanceOf[DeclarativeAggregateFunction]
+          val ref = ResolveReference(
+            ctx,
+            builder,
+            isMerge = false,
+            bindRefOffset,
+            function,
+            aggBufferIdx,
+            argsMapping,
+            aggBuffMapping)
+          function.accumulateExpressions
+            .map(_.accept(ref))
+            .map {
+              e => (exprCodeGen.generateExpression(e.accept(converter)), aggInfo.agg.filterArg)
+            }
+      }
+
+    // update agg buff in-place
+    val code = accumulateExprsWithFilterArgs.zipWithIndex
+      .map {
+        case ((accumulateExpr, filterArg), index) =>
+          val idx = auxGrouping.length + index
+          val t = aggBufferType.getTypeAt(idx)
+          val writeCode =
+            binaryRowFieldSetAccess(idx, currentAggBufferTerm, t, accumulateExpr.resultTerm)
+          s"""
+             |${accumulateExpr.code}
+             |if (${accumulateExpr.nullTerm}) {
+             |  ${binaryRowSetNull(idx, currentAggBufferTerm, t)};
+             |} else {
+             |  $writeCode;
+             |}
+             |""".stripMargin.trim
+
+      }
+      .mkString("\n")
+
+    GeneratedExpression(currentAggBufferTerm, "false", code, aggBufferType)
+  }
+
+  /**
+   * Generate codes which will read input, merge aggregate buffers and update the aggregation map
+   */
+  private[flink] def genMergeAggBufferExpr(
+      ctx: CodeGeneratorContext,
+      exprCodeGen: ExprCodeGenerator,
+      builder: RelBuilder,
+      inputType: RowType,
+      currentAggBufferTerm: String,
+      auxGrouping: Array[Int],
+      aggInfos: Seq[AggregateInfo],
+      argsMapping: Array[Array[(Int, LogicalType)]],
+      aggBuffMapping: Array[Array[(Int, LogicalType)]],
+      aggBufferType: RowType): GeneratedExpression = {
+    val converter = new ExpressionConverter(builder)
+    val mergeExprs = aggInfos
+      .map(_.function)
+      .zipWithIndex
+      .flatMap {
+        case (agg: DeclarativeAggregateFunction, aggIndex) =>
+          val aggBufferIdx = auxGrouping.length + aggIndex
+          val bindRefOffset = inputType.getFieldCount
+          val ref = ResolveReference(
+            ctx,
+            builder,
+            isMerge = true,
+            bindRefOffset,
+            agg,
+            aggBufferIdx,
+            argsMapping,
+            aggBuffMapping)
+          agg.mergeExpressions.map(_.accept(ref))
+      }
+      .map(_.accept(converter))
+      .map(exprCodeGen.generateExpression)
+
+    val aggBufferTypeWithoutAuxGrouping = if (auxGrouping.nonEmpty) {
+      // auxGrouping does not need merge-code
+      RowType.of(
+        aggBufferType.getChildren
+          .slice(auxGrouping.length, aggBufferType.getFieldCount)
+          .toArray[LogicalType],
+        aggBufferType.getFieldNames
+          .slice(auxGrouping.length, aggBufferType.getFieldCount)
+          .toArray[String]
+      )
+    } else {
+      aggBufferType
+    }
+
+    val mergeExprIdxToOutputRowPosMap = mergeExprs.indices.map {
+      i => i -> (i + auxGrouping.length)
+    }.toMap
+
+    // update agg buff in-place
+    exprCodeGen.generateResultExpression(
+      mergeExprs,
+      mergeExprIdxToOutputRowPosMap,
+      aggBufferTypeWithoutAuxGrouping,
+      classOf[BinaryRowData],
+      outRow = currentAggBufferTerm,
+      outRowWriter = None,
+      reusedOutRow = true,
+      outRowAlreadyExists = true
+    )
+  }
+
+  private[flink] def genHashAggValueOutputExprs(
+      isMerge: Boolean,
+      ctx: CodeGeneratorContext,
+      exprCodeGen: ExprCodeGenerator,
+      builder: RelBuilder,
+      auxGrouping: Array[Int],
+      aggInfos: Seq[AggregateInfo],
+      argsMapping: Array[Array[(Int, LogicalType)]],
+      aggBuffMapping: Array[Array[(Int, LogicalType)]],
+      inputType: RowType,
+      aggBufferTerm: String,
+      aggBufferType: RowType): Seq[GeneratedExpression] = {
+    // bind reusable agg buffer
+    exprCodeGen.bindSecondInput(aggBufferType, inputTerm = aggBufferTerm)
+
+    val converter = new ExpressionConverter(builder)
+    val bindRefOffset = inputType.getFieldCount
+
+    val getAuxGroupingExprs = auxGrouping.indices
+      .map {
+        idx =>
+          val (_, resultType) = aggBuffMapping(idx)(0)
+          toRexInputRef(builder, bindRefOffset + idx, resultType)
+      }
+
+    val getAggValueExprs = aggInfos.map {
+      aggInfo =>
+        val aggBufferIdx = auxGrouping.length + aggInfo.aggIndex
+        val function = aggInfo.function.asInstanceOf[DeclarativeAggregateFunction]
+        val ref = ResolveReference(
+          ctx,
+          builder,
+          isMerge,
+          bindRefOffset,
+          function,
+          aggBufferIdx,
+          argsMapping,
+          aggBuffMapping)
+        function.getValueExpression
+          .accept(ref)
+    }
+
+    val getValueExprs = (getAuxGroupingExprs ++ getAggValueExprs)
+      .map(_.accept(converter))
+      .map(exprCodeGen.generateExpression)
+
+    getValueExprs
+  }
+
   /** Generate codes which will read aggregation map, get the aggregate values */
   private[flink] def genAggMapIterationAndOutput(
       ctx: CodeGeneratorContext,

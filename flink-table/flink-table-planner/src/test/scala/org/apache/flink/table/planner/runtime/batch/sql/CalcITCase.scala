@@ -89,6 +89,13 @@ class CalcITCase extends BatchTestBase {
   }
 
   @Test
+  def testFilterAndProject(): Unit = {
+    checkResult(
+      "SELECT a + 1, cast(b as string) FROM Table3 where a is not null and c is not null and b > 2",
+      data3)
+  }
+
+  @Test
   def testManySelectWithFilter(): Unit = {
     val data = Seq(
       (true, 1, 2, 3, 4, 5, 6, 7),

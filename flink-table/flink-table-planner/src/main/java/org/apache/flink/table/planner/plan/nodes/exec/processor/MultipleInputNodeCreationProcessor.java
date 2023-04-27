@@ -28,6 +28,9 @@ import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeGraph;
 import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
 import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecBoundedStreamScan;
+import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecCalc;
+import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecHashAggregate;
+import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecHashJoin;
 import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecMultipleInput;
 import org.apache.flink.table.planner.plan.nodes.exec.common.CommonExecExchange;
 import org.apache.flink.table.planner.plan.nodes.exec.common.CommonExecTableSourceScan;
@@ -221,18 +224,33 @@ public class MultipleInputNodeCreationProcessor implements ExecNodeGraphProcesso
     private boolean canBeRootOfMultipleInputGroup(ExecNodeWrapper wrapper) {
         // only a node with more than one input can be the root,
         // as one-input operator chaining are handled by operator chains
-        /*        boolean isOneInputEnable = false;
+        boolean oneInputSupport = false;
         if (wrapper.inputs.size() == 1) {
+            // Calc which input is HashJoin can be the root node
             if (wrapper.execNode instanceof BatchExecCalc) {
-                isOneInputEnable =
-                        wrapper.execNode.getInputEdges().get(0).getSource()
-                                instanceof BatchExecHashJoin;
+                oneInputSupport = wrapper.inputs.get(0).execNode instanceof BatchExecHashJoin;
             } else if (wrapper.execNode instanceof BatchExecHashAggregate) {
+                // LocalHashAgg which input isn't Expand can be the root node
                 BatchExecHashAggregate hashAggregate = (BatchExecHashAggregate) wrapper.execNode;
-                isOneInputEnable = !hashAggregate.isFinal();
+                ExecNodeWrapper inputWrapper = wrapper.inputs.get(0);
+
+                boolean inputCalcSupport = false;
+                boolean inputHashJoinSupport = false;
+                if (inputWrapper.execNode instanceof BatchExecCalc) {
+                    if (inputWrapper.inputs.size() == 1) {
+                        if (inputWrapper.inputs.get(0).execNode instanceof BatchExecHashJoin) {
+                            inputCalcSupport = true;
+                        }
+                    }
+                } else if (inputWrapper.execNode instanceof BatchExecHashJoin) {
+                    inputHashJoinSupport = true;
+                }
+
+                oneInputSupport =
+                        !hashAggregate.isFinal() && (inputCalcSupport || inputHashJoinSupport);
             }
-        }*/
-        return wrapper.inputs.size() >= 2;
+        }
+        return wrapper.inputs.size() >= 2 || oneInputSupport;
     }
 
     // --------------------------------------------------------------------------------
@@ -392,6 +410,11 @@ public class MultipleInputNodeCreationProcessor implements ExecNodeGraphProcesso
             } else if (wrapper.inputs.size() == 1) {
                 // optimization 6. operators with only 1 input are not allowed to be the root,
                 // as their chaining will be handled by operator chains.
+                // Calc and HashAgg can be the root node
+                if (wrapper.execNode instanceof BatchExecCalc
+                        || wrapper.execNode instanceof BatchExecHashAggregate) {
+                    continue;
+                }
                 wrapper.group.removeRoot();
             }
         }
