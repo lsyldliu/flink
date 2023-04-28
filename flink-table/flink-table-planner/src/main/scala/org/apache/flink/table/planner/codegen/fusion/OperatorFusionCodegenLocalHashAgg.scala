@@ -41,6 +41,7 @@ class OperatorFusionCodegenLocalHashAgg(
     outputType: RowType,
     grouping: Array[Int],
     auxGrouping: Array[Int],
+    managedMemory: Long,
     supportAdaptiveLocalHashAgg: Boolean)
   extends OperatorFusionCodegenSupport {
 
@@ -81,6 +82,8 @@ class OperatorFusionCodegenLocalHashAgg(
   private var aggBufferExprs: Seq[GeneratedExpression] = _
 
   private var hasInput: String = _
+
+  override def getManagedMemory: Long = managedMemory
 
   override protected def doProduceProcess(multipleCtx: CodeGeneratorContext): Unit = {
     assert(inputs.size == 1)
@@ -271,7 +274,12 @@ class OperatorFusionCodegenLocalHashAgg(
          |}
        """.stripMargin
     )
-    s"$endInputMethodTerm();"
+    // we also need to call downstream endInput method
+    s"""
+       |$endInputMethodTerm();
+       |  // call downstream endInput
+       |${consumeEndInput()}
+       """.stripMargin
   }
 
   private def doConsumeProcessWithoutKeys(input: Seq[GeneratedExpression]): String = {
@@ -345,7 +353,12 @@ class OperatorFusionCodegenLocalHashAgg(
          |}
        """.stripMargin
     )
-    s"$endInputMethodTerm();"
+    // we also need to call downstream endInput method
+    s"""
+       |$endInputMethodTerm();
+       |  // call downstream endInput
+       |${consumeEndInput()}
+       """.stripMargin
   }
 
   /**

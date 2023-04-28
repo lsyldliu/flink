@@ -227,6 +227,7 @@ public class BatchExecHashAggregate extends ExecNodeBase<RowData>
                             outputRowType,
                             grouping,
                             auxGrouping,
+                            managedMemory,
                             supportAdaptiveLocalHashAgg);
         }
 

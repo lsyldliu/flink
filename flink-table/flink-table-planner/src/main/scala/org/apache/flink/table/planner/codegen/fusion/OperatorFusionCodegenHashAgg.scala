@@ -265,7 +265,12 @@ class OperatorFusionCodegenHashAgg(
          |}
        """.stripMargin
     )
-    s"$endInputMethodTerm();"
+    // we also need to call downstream endInput method
+    s"""
+       |$endInputMethodTerm();
+       |  // call downstream endInput
+       |${consumeEndInput()}
+       """.stripMargin
   }
 
   private def doConsumeProcessWithoutKeys(input: Seq[GeneratedExpression]): String = {
@@ -344,7 +349,12 @@ class OperatorFusionCodegenHashAgg(
          |}
        """.stripMargin
     )
-    s"$endInputMethodTerm();"
+    // we also need to call downstream endInput method
+    s"""
+       |$endInputMethodTerm();
+       |  // call downstream endInput
+       |${consumeEndInput()}
+       """.stripMargin
   }
 
   /**
