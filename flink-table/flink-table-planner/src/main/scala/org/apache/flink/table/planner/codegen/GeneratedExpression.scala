@@ -48,7 +48,7 @@ case class GeneratedExpression(
    * This flag is used to represent whether code has been wrapped into code block, if true, we
    * return empty to guarantee the expression is evaluated only once.
    */
-  private var codeUsed = false
+  var codeUsed = false
 
   /**
    * Indicates a constant expression do not reference input and can thus be used in the member area

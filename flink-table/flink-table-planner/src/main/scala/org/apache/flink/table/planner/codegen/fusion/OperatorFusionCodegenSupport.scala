@@ -61,6 +61,32 @@ trait OperatorFusionCodegenSupport {
     inputs += input
   }
 
+  /**
+   * The subset of inputSet those should be evaluated before this plan.
+   *
+   * We will use this to insert some code to access those columns that are actually used by current
+   * plan before calling doConsume().
+   */
+  def usedInputs: Set[Int] = Set.empty
+
+  /**
+   * Returns source code to evaluate the variables for required attributes, and clear the code of
+   * evaluated variables, to prevent them to be evaluated twice.
+   */
+  protected def evaluateRequiredVariables(
+      inputExprs: Seq[GeneratedExpression],
+      requiredInput: Set[Int]): String = {
+    val evaluateVars = new StringBuilder
+    requiredInput.foreach(
+      index => {
+        val expr = inputExprs(index)
+        if (!expr.codeUsed) {
+          evaluateVars.append(expr.getCode + "\n")
+        }
+      })
+    evaluateVars.toString()
+  }
+
   def getOutputType: RowType
 
   def getOperatorCtx: CodeGeneratorContext
@@ -147,8 +173,12 @@ trait OperatorFusionCodegenSupport {
       output.getExprCodeGenerator.bindSecondInputWithExpr(getOutputType, inputVars, row)
     }
 
+    // evaluate the expr code which will be used more than one in advance to avoid evaluated more time, Calc need it currently
+    val evaluated = evaluateRequiredVariables(inputVars, output.usedInputs)
     // we always pass column vars and row var to parent simultaneously, the output decide to use which one
     s"""
+       |  // evaluate the required expr in advance
+       |$evaluated
        |${output.doConsumeProcess(inputIdOfOutputNode, inputVars, row)}
      """.stripMargin
   }

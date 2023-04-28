@@ -20,9 +20,12 @@ package org.apache.flink.table.planner.codegen.fusion
 
 import org.apache.flink.table.api.TableException
 import org.apache.flink.table.planner.codegen.{CodeGeneratorContext, ExprCodeGenerator, GeneratedExpression}
+import org.apache.flink.table.planner.utils.JavaScalaConversionUtil
 import org.apache.flink.table.types.logical.RowType
 
-import org.apache.calcite.rex.{RexInputRef, RexNode}
+import org.apache.calcite.rex.{RexInputRef, RexNode, RexVisitorImpl}
+
+import java.util
 
 /**
  * The Calc operator for whole stage codegen.
@@ -39,6 +42,36 @@ class OperatorFusionCodegenCalc(
     condition: Option[RexNode],
     retainHeader: Boolean = false)
   extends OperatorFusionCodegenSupport {
+
+  /**
+   * The subset of inputSet those should be evaluated before this plan.
+   *
+   * We will use this to insert some code to access those columns that are actually used by current
+   * plan before calling doConsume().
+   */
+  override def usedInputs: Set[Int] = {
+    if (projection.nonEmpty) {
+      val rexInputRefIndexs = new util.ArrayList[Int]
+      val rexVisitor = new RexVisitorImpl[Void](true) {
+        override def visitInputRef(inputRef: RexInputRef): Void = {
+          rexInputRefIndexs.add(inputRef.getIndex)
+          null
+        }
+      }
+      // get all RexInputRef index
+      projection.map(_.accept(rexVisitor))
+
+      // find all index of RexInputRef which is used more than one time
+      val usedMoreThanOnce = JavaScalaConversionUtil
+        .toScala(rexInputRefIndexs)
+        .groupBy(index => index)
+        .filter(_._2.size > 1)
+        .keySet
+      usedMoreThanOnce
+    } else {
+      super.usedInputs
+    }
+  }
 
   override def getOutputType: RowType = outputType
 
