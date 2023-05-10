@@ -29,6 +29,8 @@ import org.apache.flink.connector.file.src.assigners.FileSplitAssigner;
 import org.apache.flink.connector.file.src.enumerate.FileEnumerator;
 import org.apache.flink.connector.file.src.reader.BulkFormat;
 import org.apache.flink.connector.file.table.ContinuousPartitionFetcher;
+import org.apache.flink.connector.file.table.LimitableBulkFormat;
+import org.apache.flink.connectors.hive.read.HiveInputFormat;
 import org.apache.flink.connectors.hive.read.HiveSourceSplit;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.core.io.SimpleVersionedSerializer;
@@ -97,6 +99,21 @@ public class HiveSource<T> extends AbstractFileSource<T, HiveSourceSplit> {
         this.partitionBytes = partitionBytes;
         this.fetcher = fetcher;
         this.fetcherContext = fetcherContext;
+    }
+
+    @Override
+    public void setVectorizedRead() {
+        if (readerFormat instanceof HiveInputFormat) {
+            HiveInputFormat hiveInputFormat = (HiveInputFormat) readerFormat;
+            hiveInputFormat.setVectorizedRead(true);
+        } else if (readerFormat instanceof LimitableBulkFormat) {
+            BulkFormat bulkFormat =
+                    ((LimitableBulkFormat<T, HiveSourceSplit>) readerFormat).getFormat();
+            if (bulkFormat instanceof HiveInputFormat) {
+                HiveInputFormat hiveInputFormat = (HiveInputFormat) readerFormat;
+                hiveInputFormat.setVectorizedRead(true);
+            }
+        }
     }
 
     @Override

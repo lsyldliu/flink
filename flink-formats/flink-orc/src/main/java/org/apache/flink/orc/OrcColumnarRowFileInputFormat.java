@@ -50,6 +50,7 @@ public class OrcColumnarRowFileInputFormat<BatchT, SplitT extends FileSourceSpli
                 conjunctPredicates,
                 batchSize,
                 batchFactory,
-                producedTypeInfo);
+                producedTypeInfo,
+                false);
     }
 }

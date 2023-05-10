@@ -158,6 +158,24 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
                                 InputProperty.builder().priority(readOrders[i]).build(),
                                 source.getOutputType(),
                                 "BatchInputAdapter");
+                if (source instanceof BatchExecTableSourceScan) {
+                    String tableName = ((BatchExecTableSourceScan) source).getTableName();
+                    Transformation sourceTransformation = inputTransforms.get(i);
+                    if (sourceTransformation instanceof SourceTransformation
+                            && suppportColumnarRead(jobName, tableName)) {
+                        ((SourceTransformation) sourceTransformation)
+                                .getSource()
+                                .setVectorizedRead();
+                        // insert a columnar to row ExecNode
+                        inputAdapter =
+                                new BatchExecColumnarToRow(
+                                        TableConfig.getDefault(),
+                                        InputProperty.builder().priority(readOrders[i]).build(),
+                                        source.getOutputType(),
+                                        "BatchColumnarToRow");
+                    }
+                }
+
                 inputAdapter.setInputEdges(
                         Collections.singletonList(
                                 ExecEdge.builder().source(source).target(inputAdapter).build()));

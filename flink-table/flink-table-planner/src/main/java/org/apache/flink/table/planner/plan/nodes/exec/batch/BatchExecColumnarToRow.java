@@ -22,38 +22,22 @@ import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
-import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenInput;
+import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenColumnarToRow;
 import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenSupport;
 import org.apache.flink.table.planner.delegation.PlannerBase;
-import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
-import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
-import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeContext;
 import org.apache.flink.table.planner.plan.nodes.exec.InputProperty;
-import org.apache.flink.table.planner.plan.nodes.exec.SingleTransformationTranslator;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
 
-import java.util.Collections;
+public class BatchExecColumnarToRow extends BatchExecInputAdapter {
 
-/** Batch {@link ExecNode} for multiple input operator fusion input. */
-public class BatchExecInputAdapter extends ExecNodeBase<RowData>
-        implements BatchExecNode<RowData>, SingleTransformationTranslator<RowData> {
-
-    protected OperatorFusionCodegenInput codegenInput;
-
-    public BatchExecInputAdapter(
+    public BatchExecColumnarToRow(
             ReadableConfig tableConfig,
             InputProperty inputProperty,
             LogicalType outputType,
             String description) {
-        super(
-                ExecNodeContext.newNodeId(),
-                ExecNodeContext.newContext(BatchExecInputAdapter.class),
-                ExecNodeContext.newPersistedConfig(BatchExecInputAdapter.class, tableConfig),
-                Collections.singletonList(inputProperty),
-                outputType,
-                description);
+        super(tableConfig, inputProperty, outputType, description);
     }
 
     @Override
@@ -78,7 +62,7 @@ public class BatchExecInputAdapter extends ExecNodeBase<RowData>
     public OperatorFusionCodegenSupport getInputCodegenOp(
             int multipleInputId, PlannerBase planner, ExecNodeConfig config) {
         codegenInput =
-                new OperatorFusionCodegenInput(
+                new OperatorFusionCodegenColumnarToRow(
                         new CodeGeneratorContext(
                                 config, planner.getFlinkContext().getClassLoader()),
                         multipleInputId,

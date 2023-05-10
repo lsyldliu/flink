@@ -56,6 +56,10 @@ public class LimitableBulkFormat<T, SplitT extends FileSourceSplit>
         this.limit = limit;
     }
 
+    public BulkFormat<T, SplitT> getFormat() {
+        return format;
+    }
+
     @Override
     public Reader<T> createReader(Configuration config, SplitT split) throws IOException {
         Reader<T> reader = reachLimit() ? null : format.createReader(config, split);

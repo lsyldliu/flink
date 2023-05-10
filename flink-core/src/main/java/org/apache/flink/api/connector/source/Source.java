@@ -33,6 +33,8 @@ import org.apache.flink.core.io.SimpleVersionedSerializer;
 public interface Source<T, SplitT extends SourceSplit, EnumChkT>
         extends SourceReaderFactory<T, SplitT> {
 
+    default void setVectorizedRead() {}
+
     /**
      * Get the boundedness of this source.
      *

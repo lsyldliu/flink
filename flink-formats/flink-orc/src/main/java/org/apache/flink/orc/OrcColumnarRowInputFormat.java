@@ -68,6 +68,7 @@ public class OrcColumnarRowInputFormat<BatchT, SplitT extends FileSourceSplit>
 
     private final ColumnBatchFactory<BatchT, SplitT> batchFactory;
     private final TypeInformation<RowData> producedTypeInfo;
+    private final boolean vectorizedRead;
 
     public OrcColumnarRowInputFormat(
             final OrcShim<BatchT> shim,
@@ -77,10 +78,12 @@ public class OrcColumnarRowInputFormat<BatchT, SplitT extends FileSourceSplit>
             final List<OrcFilters.Predicate> conjunctPredicates,
             final int batchSize,
             final ColumnBatchFactory<BatchT, SplitT> batchFactory,
-            TypeInformation<RowData> producedTypeInfo) {
+            TypeInformation<RowData> producedTypeInfo,
+            boolean vectorizedRead) {
         super(shim, hadoopConfig, schema, selectedFields, conjunctPredicates, batchSize);
         this.batchFactory = batchFactory;
         this.producedTypeInfo = producedTypeInfo;
+        this.vectorizedRead = vectorizedRead;
     }
 
     @Override
@@ -92,7 +95,8 @@ public class OrcColumnarRowInputFormat<BatchT, SplitT extends FileSourceSplit>
 
         final VectorizedColumnBatch flinkColumnBatch =
                 batchFactory.create(split, orcBatch.getBatch());
-        return new VectorizedColumnReaderBatch<>(orcBatch, flinkColumnBatch, recycler);
+        return new VectorizedColumnReaderBatch<>(
+                orcBatch, flinkColumnBatch, recycler, vectorizedRead);
     }
 
     @Override
@@ -114,15 +118,18 @@ public class OrcColumnarRowInputFormat<BatchT, SplitT extends FileSourceSplit>
 
         private final VectorizedColumnBatch flinkColumnBatch;
         private final ColumnarRowIterator result;
+        private final boolean vectorizedRead;
 
         VectorizedColumnReaderBatch(
                 final OrcVectorizedBatchWrapper<BatchT> orcBatch,
                 final VectorizedColumnBatch flinkColumnBatch,
-                final Pool.Recycler<OrcReaderBatch<RowData, BatchT>> recycler) {
+                final Pool.Recycler<OrcReaderBatch<RowData, BatchT>> recycler,
+                boolean vectorizedRead) {
             super(orcBatch, recycler);
             this.flinkColumnBatch = flinkColumnBatch;
             this.result =
                     new ColumnarRowIterator(new ColumnarRowData(flinkColumnBatch), this::recycle);
+            this.vectorizedRead = vectorizedRead;
         }
 
         @Override
@@ -132,7 +139,12 @@ public class OrcColumnarRowInputFormat<BatchT, SplitT extends FileSourceSplit>
             // because they point to the same data arrays internally design
             int batchSize = orcBatch.size();
             flinkColumnBatch.setNumRows(batchSize);
-            result.set(batchSize, startingOffset, 0);
+            // if support vectorized read, we set position to last, just call it once
+            if (vectorizedRead) {
+                result.set(batchSize, batchSize - 1, startingOffset, batchSize - 1);
+            } else {
+                result.set(batchSize, startingOffset, 0);
+            }
             return result;
         }
     }
@@ -151,7 +163,8 @@ public class OrcColumnarRowInputFormat<BatchT, SplitT extends FileSourceSplit>
                     int[] selectedFields,
                     List<OrcFilters.Predicate> conjunctPredicates,
                     int batchSize,
-                    Function<RowType, TypeInformation<RowData>> rowTypeInfoFactory) {
+                    Function<RowType, TypeInformation<RowData>> rowTypeInfoFactory,
+                    boolean vectorizedRead) {
         // TODO FLINK-25113 all this partition keys code should be pruned from the orc format,
         //  because now FileSystemTableSource uses FileInfoExtractorBulkFormat for reading partition
         //  keys.
@@ -193,6 +206,7 @@ public class OrcColumnarRowInputFormat<BatchT, SplitT extends FileSourceSplit>
                         new RowType(
                                 Arrays.stream(selectedFields)
                                         .mapToObj(i -> tableType.getFields().get(i))
-                                        .collect(Collectors.toList()))));
+                                        .collect(Collectors.toList()))),
+                vectorizedRead);
     }
 }

@@ -104,6 +104,7 @@ public class OrcNoHiveColumnarRowInputFormat {
                         new RowType(
                                 Arrays.stream(selectedFields)
                                         .mapToObj(i -> tableType.getFields().get(i))
-                                        .collect(Collectors.toList()))));
+                                        .collect(Collectors.toList()))),
+                false);
     }
 }

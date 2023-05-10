@@ -357,7 +357,8 @@ class OrcColumnarRowInputFormatTest {
                 selectedFields,
                 conjunctPredicates,
                 BATCH_SIZE,
-                InternalTypeInfo::of);
+                InternalTypeInfo::of,
+                false);
     }
 
     protected OrcColumnarRowInputFormat<?, FileSourceSplit> createPartitionFormat(
@@ -371,7 +372,8 @@ class OrcColumnarRowInputFormatTest {
                 selectedFields,
                 new ArrayList<>(),
                 BATCH_SIZE,
-                InternalTypeInfo::of);
+                InternalTypeInfo::of,
+                false);
     }
 
     private BulkFormat.Reader<RowData> createReader(

@@ -83,6 +83,8 @@ public class HiveInputFormat implements BulkFormat<RowData, HiveSourceSplit> {
     private final boolean useMapRedReader;
     private final PartitionFieldExtractor<HiveSourceSplit> partitionFieldExtractor;
 
+    private boolean vectorizedRead = false;
+
     public HiveInputFormat(
             JobConfWrapper jobConfWrapper,
             List<String> partitionKeys,
@@ -102,6 +104,10 @@ public class HiveInputFormat implements BulkFormat<RowData, HiveSourceSplit> {
         this.partitionFieldExtractor =
                 new PartitionFieldExtractorImpl(
                         hiveShim, JobConfUtils.getDefaultPartitionName(jobConfWrapper));
+    }
+
+    public void setVectorizedRead(boolean vectorizedRead) {
+        this.vectorizedRead = vectorizedRead;
     }
 
     @Override
@@ -183,7 +189,8 @@ public class HiveInputFormat implements BulkFormat<RowData, HiveSourceSplit> {
                         computeSelectedFields(),
                         Collections.emptyList(),
                         DEFAULT_SIZE,
-                        InternalTypeInfo::of);
+                        InternalTypeInfo::of,
+                        vectorizedRead);
     }
 
     private boolean useOrcVectorizedRead(HiveTablePartition partition) {

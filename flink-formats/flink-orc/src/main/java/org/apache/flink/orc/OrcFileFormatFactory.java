@@ -166,7 +166,8 @@ public class OrcFileFormatFactory implements BulkReaderFormatFactory, BulkWriter
                     Projection.of(projections).toTopLevelIndexes(),
                     orcPredicates,
                     VectorizedColumnBatch.DEFAULT_SIZE,
-                    sourceContext::createTypeInformation);
+                    sourceContext::createTypeInformation,
+                    false);
         }
 
         @Override

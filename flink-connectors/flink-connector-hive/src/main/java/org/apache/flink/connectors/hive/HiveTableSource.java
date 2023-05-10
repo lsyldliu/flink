@@ -80,6 +80,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.connector.file.table.FileSystemConnectorOptions.PARTITION_TIME_EXTRACTOR_TIMESTAMP_FORMATTER;
@@ -98,6 +99,8 @@ public class HiveTableSource
 
     private static final Logger LOG = LoggerFactory.getLogger(HiveTableSource.class);
     private static final String HIVE_TRANSFORMATION = "hive";
+
+    private static final AtomicLong totalInferTime = new AtomicLong(0);
 
     protected final JobConf jobConf;
     protected final ReadableConfig flinkConf;
@@ -166,18 +169,23 @@ public class HiveTableSource
                             tablePath,
                             catalogTable.getPartitionKeys(),
                             remainingPartitions);
-
-            int parallelism =
-                    new HiveParallelismInference(tablePath, flinkConf)
-                            .infer(
-                                    () ->
-                                            HiveSourceFileEnumerator.getNumFiles(
-                                                    hivePartitionsToRead, jobConf),
-                                    () ->
-                                            HiveSourceFileEnumerator.createInputSplits(
-                                                            0, hivePartitionsToRead, jobConf, true)
-                                                    .size())
-                            .limit(limit);
+            long inferStartTime = System.currentTimeMillis();
+            int parallelism = 1000;
+            /*new HiveParallelismInference(tablePath, flinkConf)
+            .infer(
+                    () ->
+                            HiveSourceFileEnumerator.getNumFiles(
+                                    hivePartitionsToRead, jobConf),
+                    () ->
+                            HiveSourceFileEnumerator.createInputSplits(
+                                            0, hivePartitionsToRead, jobConf, true)
+                                    .size())
+            .limit(limit);*/
+            long interval = System.currentTimeMillis() - inferStartTime;
+            System.out.println(
+                    String.format(
+                            "Total hive parallelism infer spend time: %s.",
+                            totalInferTime.addAndGet(interval)));
             return toDataStreamSource(
                             execEnv,
                             sourceBuilder

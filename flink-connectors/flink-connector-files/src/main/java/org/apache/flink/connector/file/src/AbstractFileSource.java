@@ -75,7 +75,7 @@ public abstract class AbstractFileSource<T, SplitT extends FileSourceSplit>
 
     private final FileSplitAssigner.Provider assignerFactory;
 
-    private final BulkFormat<T, SplitT> readerFormat;
+    protected final BulkFormat<T, SplitT> readerFormat;
 
     @Nullable private final ContinuousEnumerationSettings continuousEnumerationSettings;
 
