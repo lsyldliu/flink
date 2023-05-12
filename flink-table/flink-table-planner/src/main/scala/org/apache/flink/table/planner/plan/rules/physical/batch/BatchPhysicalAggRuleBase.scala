@@ -17,7 +17,7 @@
  */
 package org.apache.flink.table.planner.plan.rules.physical.batch
 
-import org.apache.flink.configuration.ReadableConfig
+import org.apache.flink.configuration.{PipelineOptions, ReadableConfig}
 import org.apache.flink.table.api.TableException
 import org.apache.flink.table.data.binary.BinaryRowData
 import org.apache.flink.table.functions.{AggregateFunction, DeclarativeAggregateFunction, UserDefinedFunction}
@@ -139,6 +139,36 @@ trait BatchPhysicalAggRuleBase {
           // else whether choose one-phase agg or two-phase agg depends on CBO.
           val mq = agg.getCluster.getMetadataQuery
           mq.getDistinctRowCount(agg.getInput, agg.getGroupSet, null) != null
+        }
+    }
+  }
+
+  protected def isOnePhaseAggWorkable(
+      supportAdaptiveLocalHashAgg: Boolean,
+      agg: Aggregate,
+      aggFunctions: Array[UserDefinedFunction],
+      tableConfig: ReadableConfig): Boolean = {
+    getAggPhaseStrategy(tableConfig) match {
+      case AggregatePhaseStrategy.ONE_PHASE => true
+      case AggregatePhaseStrategy.TWO_PHASE => !doAllSupportMerge(aggFunctions)
+      case AggregatePhaseStrategy.AUTO =>
+        if (!doAllSupportMerge(aggFunctions)) {
+          true
+        } else {
+          // if all aggFunctions are splittable and support adaptive local hashagg, we prefer to use two-phase agg
+          val jobName = tableConfig.get(PipelineOptions.NAME)
+          val support =
+            supportAdaptiveLocalHashAgg && (!"q23a.sql".equals(jobName) && !"q23b.sql".equals(
+              jobName))
+          if (support) {
+            false
+          } else {
+            // if ndv of group key in aggregate is Unknown and all aggFunctions are splittable,
+            // use two-phase agg.
+            // else whether choose one-phase agg or two-phase agg depends on CBO.
+            val mq = agg.getCluster.getMetadataQuery
+            mq.getDistinctRowCount(agg.getInput, agg.getGroupSet, null) != null
+          }
         }
     }
   }

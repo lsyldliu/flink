@@ -63,7 +63,9 @@ object LongHashJoinGenerator {
       joinType: HashJoinType,
       keyType: RowType,
       filterNulls: Array[Boolean]): Boolean = {
-    (joinType == HashJoinType.INNER) &&
+    (joinType == HashJoinType.INNER ||
+      joinType == HashJoinType.SEMI ||
+      joinType == HashJoinType.ANTI) &&
     filterNulls.forall(b => b) &&
     keyType.getFieldCount == 1 && {
       keyType.getTypeAt(0).getTypeRoot match {

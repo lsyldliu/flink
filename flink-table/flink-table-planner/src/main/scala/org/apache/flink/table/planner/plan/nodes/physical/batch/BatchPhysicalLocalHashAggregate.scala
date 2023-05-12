@@ -17,6 +17,7 @@
  */
 package org.apache.flink.table.planner.plan.nodes.physical.batch
 
+import org.apache.flink.configuration.PipelineOptions
 import org.apache.flink.table.functions.UserDefinedFunction
 import org.apache.flink.table.planner.calcite.FlinkTypeFactory
 import org.apache.flink.table.planner.plan.`trait`.{FlinkRelDistribution, FlinkRelDistributionTraitDef}
@@ -98,7 +99,13 @@ class BatchPhysicalLocalHashAggregate(
 
   override def satisfyTraits(requiredTraitSet: RelTraitSet): Option[RelNode] = {
     // Does not to try to satisfy requirement by localAgg's input if enforce to use two-stage agg.
-    if (isEnforceTwoStageAgg) {
+    /*    if (isEnforceTwoStageAgg) {
+      return None
+    }*/
+    val jobName = unwrapTableConfig(this).get(PipelineOptions.NAME)
+    val support =
+      supportAdaptiveLocalHashAgg && (!"q23a.sql".equals(jobName) && !"q23b.sql".equals(jobName))
+    if (isEnforceTwoStageAgg || support) {
       return None
     }
 
