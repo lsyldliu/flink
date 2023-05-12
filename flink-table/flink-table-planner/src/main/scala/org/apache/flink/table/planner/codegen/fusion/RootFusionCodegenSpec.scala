@@ -35,8 +35,8 @@ import java.util
 
 import scala.collection.mutable.ListBuffer
 
-class OperatorFusionCodegenOutput(operatorCtx: CodeGeneratorContext)
-  extends OperatorFusionCodegenSupport
+class RootFusionCodegenSpec(operatorCtx: CodeGeneratorContext)
+  extends FusionCodegenSpec
   with Logging {
 
   private lazy val exprCodeGenerator = new ExprCodeGenerator(operatorCtx, false, true)
@@ -130,7 +130,7 @@ class OperatorFusionCodegenOutput(operatorCtx: CodeGeneratorContext)
     multipleCtx.addReusableInitStatement(
       s"this.inputSelectionHandler = new ${className[InputSelectionHandler]}($inputSpecRefs);")
 
-    val operatorName = newName("BatchMultipleInputStreamOperator")
+    val operatorName = newName("MultipleInputStreamOperator")
     val operatorCode =
       s"""
       public final class $operatorName extends ${className[AbstractStreamOperatorV2[_]]}
@@ -202,8 +202,8 @@ class OperatorFusionCodegenOutput(operatorCtx: CodeGeneratorContext)
       totalManagedMemory)
   }
 
-  private def getAllOperatorAndMem(): (util.ArrayDeque[OperatorFusionCodegenSupport], Long) = {
-    val operators = new util.ArrayDeque[OperatorFusionCodegenSupport]
+  private def getAllOperatorAndMem(): (util.ArrayDeque[FusionCodegenSpec], Long) = {
+    val operators = new util.ArrayDeque[FusionCodegenSpec]
     getAllOperators(this, operators)
 
     var totalManagedMemory: Long = 0
@@ -219,11 +219,11 @@ class OperatorFusionCodegenOutput(operatorCtx: CodeGeneratorContext)
   }
 
   private def getAllOperators(
-      outputOp: OperatorFusionCodegenSupport,
-      operators: util.ArrayDeque[OperatorFusionCodegenSupport]): Unit = {
+      outputOp: FusionCodegenSpec,
+      operators: util.ArrayDeque[FusionCodegenSpec]): Unit = {
     operators.add(outputOp)
     // visit all input operator recursively
-    val inputOps: ListBuffer[OperatorFusionCodegenSupport] = outputOp.inputs
+    val inputOps: ListBuffer[FusionCodegenSpec] = outputOp.inputs
     inputOps.foreach(op => getAllOperators(op, operators))
   }
 

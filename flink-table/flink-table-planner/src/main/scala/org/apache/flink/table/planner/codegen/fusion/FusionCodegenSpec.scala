@@ -27,22 +27,22 @@ import org.apache.flink.table.types.logical.RowType
 import scala.collection.mutable.ListBuffer
 
 /** An interface for those physical operators that support multiple fusion codegen. */
-trait OperatorFusionCodegenSupport {
+trait FusionCodegenSpec {
 
   /** Prefix used in the current operator's variable names. */
   protected def variablePrefix: String = this match {
-    case _: OperatorFusionCodegenInput => "input_"
-    case _: OperatorFusionCodegenCalc => "calc_"
-    case _: OperatorFusionCodegenHashJoin => "hj_"
-    case _: OperatorFusionCodegenHashAgg => "hashagg_"
-    case _: OperatorFusionCodegenLocalHashAgg => "localagg_"
-    case _: OperatorFusionCodegenOutput => "out_"
+    case _: InputFusionCodegenSpec => "input_"
+    case _: CalcFusionCodegenSpec => "calc_"
+    case _: HashJoinFusionCodegenSpec => "hj_"
+    case _: HashAggFusionCodegenSpec => "hashagg_"
+    case _: LocalHashAggFusionCodegenSpec => "localagg_"
+    case _: RootFusionCodegenSpec => "root_"
   }
 
   protected var managedMemoryFraction: Double = 0
 
   /** Which ExecNode is calling produce() of this one. It's itself for the first . */
-  protected var output: OperatorFusionCodegenSupport = null
+  protected var output: FusionCodegenSpec = null
 
   /**
    * The input id (start from 1) corresponding to the parent inputs. e.g. the parent is a join
@@ -54,10 +54,10 @@ trait OperatorFusionCodegenSupport {
 
   protected var inputRowTerm: String = newName(variablePrefix + "inputRow")
 
-  val inputs: ListBuffer[OperatorFusionCodegenSupport] =
-    new ListBuffer[OperatorFusionCodegenSupport]()
+  val inputs: ListBuffer[FusionCodegenSpec] =
+    new ListBuffer[FusionCodegenSpec]()
 
-  def addInput(input: OperatorFusionCodegenSupport): Unit = {
+  def addInput(input: FusionCodegenSpec): Unit = {
     inputs += input
   }
 
@@ -148,7 +148,7 @@ trait OperatorFusionCodegenSupport {
   final def produceProcess(
       multipleCtx: CodeGeneratorContext,
       inputIdOfOutputNode: Int,
-      output: OperatorFusionCodegenSupport): Unit = {
+      output: FusionCodegenSpec): Unit = {
     this.output = output
     this.inputIdOfOutputNode = inputIdOfOutputNode
     doProduceProcess(multipleCtx)

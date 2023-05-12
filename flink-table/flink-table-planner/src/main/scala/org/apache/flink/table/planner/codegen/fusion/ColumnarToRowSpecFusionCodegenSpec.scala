@@ -19,22 +19,17 @@
 package org.apache.flink.table.planner.codegen.fusion
 
 import org.apache.flink.streaming.api.operators.AbstractInput
-import org.apache.flink.table.planner.codegen.{CodeGeneratorContext, ExprCodeGenerator}
-import org.apache.flink.table.planner.codegen.CodeGenUtils.{boxedTypeTermForType, className, DEFAULT_INPUT_TERM}
+import org.apache.flink.table.data.columnar.ColumnarRowData
+import org.apache.flink.table.planner.codegen.CodeGeneratorContext
+import org.apache.flink.table.planner.codegen.CodeGenUtils.{boxedTypeTermForType, className, newName, DEFAULT_INPUT_TERM}
 import org.apache.flink.table.planner.codegen.OperatorCodeGenerator.{ELEMENT, STREAM_RECORD}
 import org.apache.flink.table.types.logical.RowType
 
-class OperatorFusionCodegenInput(
+class ColumnarToRowSpecFusionCodegenSpec(
     operatorCtx: CodeGeneratorContext,
     multipleInputId: Int,
     outputType: RowType)
-  extends OperatorFusionCodegenSupport {
-
-  override def getOutputType: RowType = outputType
-
-  override def getExprCodeGenerator: ExprCodeGenerator = exprCodeGenerator
-
-  private lazy val exprCodeGenerator = new ExprCodeGenerator(operatorCtx, false, true)
+  extends InputFusionCodegenSpec(operatorCtx, multipleInputId, outputType) {
 
   override def doProduceProcess(multipleCtx: CodeGeneratorContext): Unit = {
     val inputTypeTerm = boxedTypeTermForType(outputType)
@@ -49,6 +44,10 @@ class OperatorFusionCodegenInput(
          |}
          |""".stripMargin
     )
+
+    val columnarRowTerm = newName("columnarRowData")
+    val columnarRowTypeTerm = classOf[ColumnarRowData].getName
+    val rowNumTerm = newName("numRows")
     multipleCtx.addReusableMultipleProcessStatement(
       multipleInputId,
       s"""
@@ -56,29 +55,16 @@ class OperatorFusionCodegenInput(
          |  @Override
          |  public void processElement($STREAM_RECORD $ELEMENT) throws Exception {
          |    // InputType: ${outputType.asSerializableString()}
-         |    $inputTypeTerm $inputTerm = ($inputTypeTerm) $ELEMENT.getValue();
-         |    $processTerm($inputTerm);
+         |    // for loop to iterate the ColumnarRowData
+         |    $columnarRowTypeTerm $columnarRowTerm = ($columnarRowTypeTerm) $ELEMENT.getValue();
+         |    int $rowNumTerm = $columnarRowTerm.getNumRows();
+         |    for(int i = 0; i < $rowNumTerm; i++) {
+         |      $columnarRowTerm.setRowId(i);
+         |      $processTerm($columnarRowTerm);
+         |    }
          |  }
          |}
          |""".stripMargin
     )
   }
-
-  override def doProduceEndInput(multipleCtx: CodeGeneratorContext): Unit = {
-    val endInputTerm = "endInput" + multipleInputId
-    multipleCtx.addReusableMember(
-      s"""
-         |public void $endInputTerm() throws Exception {
-         |  ${consumeEndInput()}
-         |}
-         |""".stripMargin
-    )
-    multipleCtx.addReusableMultipleEndInputStatement(s"""
-                                                        |case $multipleInputId:
-                                                        |  $endInputTerm();
-                                                        |  break;
-                                                        |""".stripMargin)
-  }
-
-  override def getOperatorCtx: CodeGeneratorContext = operatorCtx
 }

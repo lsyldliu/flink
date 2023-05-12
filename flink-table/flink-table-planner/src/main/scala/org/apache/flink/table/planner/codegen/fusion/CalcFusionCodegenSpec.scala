@@ -35,13 +35,13 @@ import java.util
  * @param condition
  * @param retainHeader
  */
-class OperatorFusionCodegenCalc(
+class CalcFusionCodegenSpec(
     operatorCtx: CodeGeneratorContext,
     outputType: RowType,
     projection: Seq[RexNode],
     condition: Option[RexNode],
     retainHeader: Boolean = false)
-  extends OperatorFusionCodegenSupport {
+  extends FusionCodegenSpec {
 
   /**
    * The subset of inputSet those should be evaluated before this plan.

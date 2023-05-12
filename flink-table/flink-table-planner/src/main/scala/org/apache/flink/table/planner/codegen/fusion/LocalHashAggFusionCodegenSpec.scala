@@ -22,8 +22,10 @@ import org.apache.flink.table.data.binary.BinaryRowData
 import org.apache.flink.table.data.utils.JoinedRowData
 import org.apache.flink.table.planner.codegen.{CodeGeneratorContext, CodeGenUtils, ExprCodeGenerator, GeneratedExpression}
 import org.apache.flink.table.planner.codegen.CodeGenUtils.{newName, newNames}
+import org.apache.flink.table.planner.codegen.ProjectionCodeGenerator.genAdaptiveLocalHashAggProjectionCode
 import org.apache.flink.table.planner.codegen.agg.batch.{AggCodeGenHelper, HashAggCodeGenHelper}
 import org.apache.flink.table.planner.codegen.agg.batch.AggCodeGenHelper.{buildAggregateArgsMapping, genAggregateByFlatAggregateBufferExpr, genFlatAggBufferExprs, genInitFlatAggregateBufferExr}
+import org.apache.flink.table.planner.codegen.agg.batch.HashAggCodeGenerator.{TABLE_EXEC_LOCAL_HASH_AGG_ADAPTIVE_DISTINCT_VALUE_RATE_THRESHOLD, TABLE_EXEC_LOCAL_HASH_AGG_ADAPTIVE_ENABLED, TABLE_EXEC_LOCAL_HASH_AGG_ADAPTIVE_SAMPLING_THRESHOLD}
 import org.apache.flink.table.planner.codegen.agg.batch.HashAggCodeGenHelper.{buildAggregateAggBuffMapping, genAggregateExpr, genReusableEmptyAggBuffer}
 import org.apache.flink.table.planner.plan.utils.AggregateInfoList
 import org.apache.flink.table.planner.typeutils.RowTypeUtils
@@ -34,7 +36,7 @@ import org.apache.flink.table.types.logical.{LogicalType, RowType}
 import org.apache.calcite.tools.RelBuilder
 
 /** Local HashAgg operator, it will emit records in both process and endInput method. */
-class OperatorFusionCodegenLocalHashAgg(
+class LocalHashAggFusionCodegenSpec(
     operatorCtx: CodeGeneratorContext,
     builder: RelBuilder,
     aggInfoList: AggregateInfoList,
@@ -43,7 +45,7 @@ class OperatorFusionCodegenLocalHashAgg(
     auxGrouping: Array[Int],
     managedMemory: Long,
     supportAdaptiveLocalHashAgg: Boolean)
-  extends OperatorFusionCodegenSupport {
+  extends FusionCodegenSpec {
 
   override def getOutputType: RowType = outputType
 
@@ -83,6 +85,8 @@ class OperatorFusionCodegenLocalHashAgg(
 
   private var hasInput: String = _
 
+  private var localAggSuppressedTerm: String = _
+
   override def getManagedMemory: Long = managedMemory
 
   override protected def doProduceProcess(multipleCtx: CodeGeneratorContext): Unit = {
@@ -121,7 +125,7 @@ class OperatorFusionCodegenLocalHashAgg(
     }
   }
 
-  private def doConsumeProcessWithKeys(input: Seq[GeneratedExpression]): String = {
+  /*  private def doConsumeProcessWithKeys(input: Seq[GeneratedExpression]): String = {
     // gen code to do group key projection from input
     val Seq(currentKeyTerm, currentKeyWriterTerm) = newNames("currentKey", "currentKeyWriter")
 
@@ -226,8 +230,8 @@ class OperatorFusionCodegenLocalHashAgg(
          |   // set result and output
          |   $reuseAggMapKeyTerm = ($rowDataType)$iteratorTerm.getKey();
          |   $reuseAggBufferTerm = ($rowDataType)$iteratorTerm.getValue();
-         |   
-         |   // consume the row of agg produce 
+         |
+         |   // consume the row of agg produce
          |   $consumeMethodTerm($outputTerm.replace($reuseAggMapKeyTerm, $reuseAggBufferTerm));
          |}
        """.stripMargin
@@ -271,6 +275,251 @@ class OperatorFusionCodegenLocalHashAgg(
       s"""
          |private void $endInputMethodTerm() throws Exception {
          |  $outputFromMap
+         |}
+     """.stripMargin
+    )
+    // we also need to call downstream endInput method
+    s"""
+       |$endInputMethodTerm();
+       |  // call downstream endInput
+       |${consumeEndInput()}
+     """.stripMargin
+  }*/
+
+  private def doConsumeProcessWithKeys(input: Seq[GeneratedExpression]): String = {
+    // gen code to do group key projection from input
+    val Seq(currentKeyTerm, currentKeyWriterTerm) = newNames("currentKey", "currentKeyWriter")
+
+    val lookupInfoTypeTerm = classOf[BytesMap.LookupInfo[_, _]].getCanonicalName
+    val binaryRowTypeTerm = classOf[BinaryRowData].getName
+    val Seq(lookupInfo, currentAggBufferTerm) = newNames("lookupInfo", "currentAggBuffer")
+
+    // evaluate input field access for group key projection and aggregate buffer update
+    val inputExprCode = input.map(x => x.getCode).mkString("\n").trim
+
+    // project key row from input
+    val keyProjectionExpr = generateRowExpr(
+      grouping,
+      input,
+      groupKeyRowType,
+      classOf[BinaryRowData],
+      outRecordTerm = currentKeyTerm,
+      outRecordWriterTerm = currentKeyWriterTerm)
+
+    // gen code to create empty agg buffer
+    val initedAggBuffer = genReusableEmptyAggBuffer(
+      operatorCtx,
+      getExprCodeGenerator,
+      builder,
+      inputRowTerm,
+      inputType,
+      auxGrouping,
+      aggInfos,
+      aggBufferRowType)
+    val lazyInitAggBufferCode = if (auxGrouping.isEmpty) {
+      // create an empty agg buffer and initialized make it reusable
+      operatorCtx.addReusableOpenStatement(initedAggBuffer.getCode)
+      ""
+    } else {
+      s"""
+         |// lazy init agg buffer (with auxGrouping)
+         |${initedAggBuffer.getCode}
+       """.stripMargin
+    }
+
+    // generate code to update agg buffer
+    getExprCodeGenerator.bindSecondInput(aggBufferRowType, currentAggBufferTerm)
+    val aggBufferAccessCode =
+      getExprCodeGenerator.generateInputAccessExprs(2).map(e => e.getCode).mkString("\n")
+    // generate code to update agg buffer
+    val aggregateExpr = genAggregateExpr(
+      false,
+      operatorCtx,
+      getExprCodeGenerator,
+      builder,
+      inputType,
+      auxGrouping,
+      aggInfos,
+      argsMapping,
+      aggBuffMapping,
+      currentAggBufferTerm,
+      aggBufferRowType
+    )
+
+    val retryAppendCode =
+      s"""
+         | // reset aggregate map retry append
+         |$aggregateMapTerm.reset();
+         |$lookupInfo = ($lookupInfoTypeTerm) $aggregateMapTerm.lookup($currentKeyTerm);
+         |try {
+         |  $currentAggBufferTerm =
+         |    $aggregateMapTerm.append($lookupInfo, ${initedAggBuffer.resultTerm});
+         |} catch (java.io.EOFException e) {
+         |  throw new OutOfMemoryError("BytesHashMap Out of Memory.");
+         |}
+       """.stripMargin
+
+    // generate code that consume RowData
+    val outputTerm = CodeGenUtils.newName("hashAggOutput")
+    val (reuseAggMapKeyTerm, reuseAggBufferTerm) =
+      HashAggCodeGenHelper.prepareTermForAggMapIteration(
+        operatorCtx,
+        outputTerm,
+        outputType,
+        classOf[JoinedRowData])
+
+    val iteratorTerm = CodeGenUtils.newName("iterator")
+    val iteratorType = classOf[KeyValueIterator[_, _]].getCanonicalName
+    val rowDataType = classOf[RowData].getCanonicalName
+
+    // bind the input before call consume when pass row to downstream, rest the second input
+    getExprCodeGenerator.bindInputAndResetSecond(outputType, outputTerm)
+    val consumeCode = consumeProcess(null, outputTerm)
+    val consumeMethodTerm = newName(variablePrefix + "consume")
+    operatorCtx.addReusableMember(
+      s"""
+         |private void $consumeMethodTerm($rowDataType $outputTerm) throws Exception {
+         |  $consumeCode
+         |}
+       """.stripMargin
+    )
+    outputFromMap =
+      s"""
+         |$iteratorType<$rowDataType, $rowDataType> $iteratorTerm =
+         |  $aggregateMapTerm.getEntryIterator(false); // reuse key/value during iterating
+         |while ($iteratorTerm.advanceNext()) {
+         |   // set result and output
+         |   $reuseAggMapKeyTerm = ($rowDataType)$iteratorTerm.getKey();
+         |   $reuseAggBufferTerm = ($rowDataType)$iteratorTerm.getValue();
+         |
+         |   // consume the row of agg produce
+         |   $consumeMethodTerm($outputTerm.replace($reuseAggMapKeyTerm, $reuseAggBufferTerm));
+         |}
+       """.stripMargin
+
+    // generate the adaptive local hash agg
+    localAggSuppressedTerm = CodeGenUtils.newName("localAggSuppressed")
+    operatorCtx.addReusableMember(s"private transient boolean $localAggSuppressedTerm = false;")
+    val (
+      distinctCountIncCode,
+      totalCountIncCode,
+      adaptiveSamplingCode,
+      adaptiveLocalHashAggCode,
+      flushResultSuppressEnableCode) = {
+      if (
+        operatorCtx.tableConfig.get(TABLE_EXEC_LOCAL_HASH_AGG_ADAPTIVE_ENABLED) &&
+        supportAdaptiveLocalHashAgg
+      ) {
+        val Seq(adaptiveLocalAggValue, adaptiveLocalAggWriter) =
+          newNames("adaptiveLocalAggValue", "adaptiveLocalAggWriter")
+        val projectionCode = genAdaptiveLocalHashAggProjectionCode(
+          operatorCtx,
+          input,
+          grouping,
+          inputType,
+          classOf[BinaryRowData],
+          aggInfos,
+          adaptiveLocalAggValue,
+          adaptiveLocalAggWriter)
+        val adaptiveDistinctCountTerm = CodeGenUtils.newName("distinctCount")
+        val adaptiveTotalCountTerm = CodeGenUtils.newName("totalCount")
+        operatorCtx.addReusableMember(s"private transient long $adaptiveDistinctCountTerm = 0;")
+        operatorCtx.addReusableMember(s"private transient long $adaptiveTotalCountTerm = 0;")
+
+        val samplingThreshold =
+          operatorCtx.tableConfig.get(TABLE_EXEC_LOCAL_HASH_AGG_ADAPTIVE_SAMPLING_THRESHOLD)
+        val distinctValueRateThreshold =
+          operatorCtx.tableConfig.get(
+            TABLE_EXEC_LOCAL_HASH_AGG_ADAPTIVE_DISTINCT_VALUE_RATE_THRESHOLD)
+        (
+          s"$adaptiveDistinctCountTerm++;",
+          s"$adaptiveTotalCountTerm++;",
+          s"""
+             |if ($adaptiveTotalCountTerm == $samplingThreshold) {
+             |  LOG.info("Local hash aggregation checkpoint reached, sampling threshold = " +
+             |    $samplingThreshold + ", distinct value count = " + $adaptiveDistinctCountTerm + ", total = " +
+             |    $adaptiveTotalCountTerm + ", distinct value rate threshold = "
+             |    + $distinctValueRateThreshold);
+             |  if ($adaptiveDistinctCountTerm / (1.0 * $adaptiveTotalCountTerm) > $distinctValueRateThreshold) {
+             |    LOG.info("Local hash aggregation is suppressed");
+             |    $localAggSuppressedTerm = true;
+             |  }
+             |}
+             |""".stripMargin,
+          s"""
+             |if ($localAggSuppressedTerm) {
+             |  $projectionCode
+             |  $consumeMethodTerm($adaptiveLocalAggValue);
+             |  continue;
+             |}
+             |""".stripMargin,
+          s"""
+             |if ($localAggSuppressedTerm) {
+             |  $outputFromMap
+             |}
+             |""".stripMargin)
+
+      } else {
+        ("", "", "", "", "")
+      }
+
+    }
+
+    val processCode =
+      s"""
+         |do {
+         |   // input field access
+         |  $inputExprCode
+         |
+         |  $adaptiveLocalHashAggCode
+         |
+         |  // project key from input
+         |  ${keyProjectionExpr.getCode}
+         |
+         |   // lookup output buffer using current group key
+         |  $lookupInfoTypeTerm $lookupInfo = ($lookupInfoTypeTerm) $aggregateMapTerm.lookup($currentKeyTerm);
+         |  $binaryRowTypeTerm $currentAggBufferTerm = ($binaryRowTypeTerm) $lookupInfo.getValue();
+         |
+         |  if (!$lookupInfo.isFound()) {
+         |    $distinctCountIncCode
+         |    $lazyInitAggBufferCode
+         |    // append empty agg buffer into aggregate map for current group key
+         |    try {
+         |      $currentAggBufferTerm =
+         |        $aggregateMapTerm.append($lookupInfo, ${initedAggBuffer.resultTerm});
+         |    } catch (java.io.EOFException exp) {
+         |      LOG.info("BytesHashMap out of memory with {} entries, output directly.", $aggregateMapTerm.getNumElements());
+         |      // hash map out of memory, output directly
+         |      $outputFromMap
+         |      // retry append
+         |      $retryAppendCode
+         |    }
+         |  }
+         |
+         |  $totalCountIncCode
+         |  $adaptiveSamplingCode
+         |
+         |   // aggregate buffer fields access
+         |  $aggBufferAccessCode
+         |   // do aggregate and update agg buffer
+         |  ${aggregateExpr.getCode}
+         |   // flush result form map if suppress is enable.
+         |  $flushResultSuppressEnableCode
+         |} while(false);
+         |""".stripMargin.trim
+
+    processCode
+  }
+
+  private def doConsumeEndInputWithKeys(): String = {
+    // output from aggregate map, reuse the generated code in process method
+    val endInputMethodTerm = newName(variablePrefix + "withKeyEndInput")
+    operatorCtx.addReusableMember(
+      s"""
+         |private void $endInputMethodTerm() throws Exception {
+         |  if (!$localAggSuppressedTerm) {
+         |    $outputFromMap
+         |  }
          |}
        """.stripMargin
     )

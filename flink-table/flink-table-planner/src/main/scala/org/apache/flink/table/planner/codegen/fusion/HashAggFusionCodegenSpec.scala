@@ -36,7 +36,7 @@ import org.apache.calcite.tools.RelBuilder
  * HashAgg operator, it consume upstream records in process method, only emit record in endInput
  * method.
  */
-class OperatorFusionCodegenHashAgg(
+class HashAggFusionCodegenSpec(
     operatorCtx: CodeGeneratorContext,
     builder: RelBuilder,
     aggInfoList: AggregateInfoList,
@@ -48,7 +48,7 @@ class OperatorFusionCodegenHashAgg(
     maxNumFileHandles: Int,
     compressionEnabled: Boolean,
     compressionBlockSize: Int)
-  extends OperatorFusionCodegenSupport {
+  extends FusionCodegenSpec {
 
   override def getOutputType: RowType = outputType
 

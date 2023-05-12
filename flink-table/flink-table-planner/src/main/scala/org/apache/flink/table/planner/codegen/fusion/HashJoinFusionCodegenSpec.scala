@@ -21,7 +21,7 @@ package org.apache.flink.table.planner.codegen.fusion
 import org.apache.flink.table.data.TimestampData
 import org.apache.flink.table.data.binary.BinaryRowData
 import org.apache.flink.table.planner.codegen.{CodeGeneratorContext, ExprCodeGenerator, GeneratedExpression}
-import org.apache.flink.table.planner.codegen.CodeGenUtils.{newName, newNames, BINARY_ROW, ROW_DATA}
+import org.apache.flink.table.planner.codegen.CodeGenUtils.{newName, newNames, primitiveDefaultValue, primitiveTypeTermForType, BINARY_ROW, ROW_DATA}
 import org.apache.flink.table.planner.codegen.LongHashJoinGenerator.{genGetLongKey, genProjection}
 import org.apache.flink.table.planner.plan.nodes.exec.spec.JoinSpec
 import org.apache.flink.table.runtime.hashtable.LongHybridHashTable
@@ -31,7 +31,7 @@ import org.apache.flink.table.runtime.util.RowIterator
 import org.apache.flink.table.types.logical.{LocalZonedTimestampType, LogicalType, RowType, TimestampType}
 import org.apache.flink.table.types.logical.LogicalTypeRoot.{BIGINT, DATE, DOUBLE, FLOAT, INTEGER, SMALLINT, TIME_WITHOUT_TIME_ZONE, TIMESTAMP_WITH_LOCAL_TIME_ZONE, TIMESTAMP_WITHOUT_TIME_ZONE, TINYINT}
 
-class OperatorFusionCodegenHashJoin(
+class HashJoinFusionCodegenSpec(
     operatorCtx: CodeGeneratorContext,
     outputType: RowType,
     leftIsBuild: Boolean,
@@ -44,7 +44,7 @@ class OperatorFusionCodegenHashJoin(
     managedMemory: Long,
     compressionEnabled: Boolean,
     compressionBlockSize: Int)
-  extends OperatorFusionCodegenSupport {
+  extends FusionCodegenSpec {
 
   override def getOutputType: RowType = outputType
 
@@ -122,6 +122,9 @@ class OperatorFusionCodegenHashJoin(
         hashJoinType match {
           case HashJoinType.INNER =>
             codegenInnerProbe(1, input)
+          case HashJoinType.PROBE_OUTER => codegenProbeOuterProbe(1, input)
+          case HashJoinType.SEMI => codegenSemiProbe(1, input)
+          case HashJoinType.ANTI => codegenAntiProbe(1, input)
           case _ =>
             throw new UnsupportedOperationException(
               s"Multiple fusion codegen doesn't support $hashJoinType now.")
@@ -132,6 +135,9 @@ class OperatorFusionCodegenHashJoin(
         hashJoinType match {
           case HashJoinType.INNER =>
             codegenInnerProbe(2, input)
+          case HashJoinType.PROBE_OUTER => codegenProbeOuterProbe(2, input)
+          case HashJoinType.SEMI => codegenSemiProbe(2, input)
+          case HashJoinType.ANTI => codegenAntiProbe(2, input)
           case _ =>
             throw new UnsupportedOperationException(
               s"Multiple fusion codegen doesn't support $hashJoinType now.")
@@ -180,6 +186,110 @@ class OperatorFusionCodegenHashJoin(
        |      ${consumeProcess(resultVars)}
        |    }
        |  }
+       |}
+           """.stripMargin
+  }
+
+  private def codegenProbeOuterProbe(buildInputId: Int, input: Seq[GeneratedExpression]): String = {
+    println("left outer join codegen")
+    val (keyEv, anyNull) = genStreamSideJoinKey(keyType, probeKeys, input)
+    val keyCode = keyEv.getCode
+    val matched = newName("buildRow")
+    val buildVars = genBuildSideVars(buildInputId, matched, buildType)
+
+    // filter the output via condition
+    val conditionPassed = newName("conditionPassed")
+    val checkCondition = if (joinSpec.getNonEquiCondition.isPresent) {
+      val condition = joinSpec.getNonEquiCondition.get
+      // bind the build row name again
+      val expr = exprCodeGenerator.generateExpression(condition)
+      s"""
+         |boolean $conditionPassed = true;
+         |${expr.getCode}
+         |if ($matched != null) {
+         |  ${expr.getCode}
+         |  $conditionPassed = !${expr.nullTerm} && ${expr.resultTerm};
+         |}
+       """.stripMargin
+    } else {
+      s"final boolean $conditionPassed = true;"
+    }
+
+    val resultVars = if (leftIsBuild) {
+      buildVars ++ input
+    } else {
+      input ++ buildVars
+    }
+    val buildIterTerm = newName("buildIter")
+    val found = newName("found")
+    s"""
+       |// generate join key for probe side
+       |$keyCode
+       |
+       |boolean $found = false;
+       |// find matches from hash table
+       |${classOf[RowIterator[_]].getCanonicalName} $buildIterTerm = $anyNull ?
+       |  null : $hashTableTerm.get(${keyEv.resultTerm});
+       |while (($buildIterTerm != null && $buildIterTerm.advanceNext()) || !$found) {
+       |  $ROW_DATA $matched = $buildIterTerm != null ? $buildIterTerm.getRow() : null;
+       |  ${checkCondition.trim}
+       |  if ($conditionPassed) {
+       |    $found = true;
+       |    ${consumeProcess(resultVars)}
+       |  }
+       |}
+           """.stripMargin
+  }
+
+  private def codegenSemiProbe(buildInputId: Int, input: Seq[GeneratedExpression]): String = {
+    println("semi join codegen")
+    val (keyEv, anyNull) = genStreamSideJoinKey(keyType, probeKeys, input)
+    val keyCode = keyEv.getCode
+    val (matched, checkCondition, buildVars) = getJoinCondition(buildInputId, buildType)
+    val buildIterTerm = newName("buildIter")
+    s"""
+       |// generate join key for probe side
+       |$keyCode
+       |// find matches from hash table
+       |${classOf[RowIterator[_]].getCanonicalName} $buildIterTerm = $anyNull ?
+       |  null : $hashTableTerm.get(${keyEv.resultTerm});
+       |if ($buildIterTerm != null ) {
+       |  while ($buildIterTerm.advanceNext()) {
+       |    $checkCondition {
+       |      ${consumeProcess(input)}
+       |      break;
+       |    }
+       |  }
+       |}
+           """.stripMargin
+  }
+
+  private def codegenAntiProbe(buildInputId: Int, input: Seq[GeneratedExpression]): String = {
+    val (keyEv, anyNull) = genStreamSideJoinKey(keyType, probeKeys, input)
+    val keyCode = keyEv.getCode
+    val (matched, checkCondition, buildVars) = getJoinCondition(buildInputId, buildType)
+
+    val buildIterTerm = newName("buildIter")
+    val found = newName("found")
+
+    s"""
+       |// generate join key for probe side
+       |$keyCode
+       |boolean $found = false;
+       |// find matches from hash table
+       |${classOf[RowIterator[_]].getCanonicalName} $buildIterTerm = $anyNull ?
+       |  null : $hashTableTerm.get(${keyEv.resultTerm});
+       |if ($buildIterTerm != null ) {
+       |  while ($buildIterTerm.advanceNext()) {
+       |    $checkCondition {
+       |      $found = true;
+       |      break;
+       |    }
+       |  }
+       |}
+       |
+       |if (!$found) {
+       |  ${consumeProcess(input)}
        |}
            """.stripMargin
   }
@@ -298,8 +408,27 @@ class OperatorFusionCodegenHashJoin(
     }
 
     hashJoinType match {
-      case HashJoinType.INNER =>
+      case HashJoinType.INNER | HashJoinType.SEMI | HashJoinType.ANTI =>
         exprCodeGenerator.generateInputAccessExprs(buildInputId)
+      case HashJoinType.PROBE_OUTER =>
+        val buildExprs = exprCodeGenerator.generateInputAccessExprs(buildInputId)
+        buildExprs.zipWithIndex.map {
+          case (expr, i) =>
+            val fieldType = buildType.getTypeAt(i)
+            val resultTypeTerm = primitiveTypeTermForType(fieldType)
+            val defaultValue = primitiveDefaultValue(fieldType)
+            val Seq(fieldTerm, nullTerm) = newNames("field", "isNull")
+            val code = s"""
+                          |boolean $nullTerm = true;
+                          |$resultTypeTerm $fieldTerm = $defaultValue;
+                          |if ($buildRow != null) {
+                          |  ${expr.getCode}
+                          |  $nullTerm = ${expr.nullTerm};
+                          |  $fieldTerm = ${expr.resultTerm};
+                          |}
+          """.stripMargin
+            GeneratedExpression(fieldTerm, nullTerm, code, fieldType)
+        }
       case _ =>
         throw new IllegalArgumentException(
           s"JoinCodegenSupport.genBuildSideVars should not take $hashJoinType as the JoinType")

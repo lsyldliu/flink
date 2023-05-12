@@ -200,7 +200,7 @@ public abstract class LongHybridHashTable extends BaseHybridHashTable {
         }
     }
 
-    public RowIterator<BinaryRowData> get(long probeKey) throws IOException {
+    public final RowIterator<BinaryRowData> get(long probeKey) throws IOException {
         if (denseMode) {
             if (probeKey >= minKey && probeKey <= maxKey) {
                 long denseBucket = probeKey - minKey;
