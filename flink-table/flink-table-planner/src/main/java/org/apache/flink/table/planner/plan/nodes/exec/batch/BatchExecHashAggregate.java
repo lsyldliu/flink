@@ -26,9 +26,9 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
 import org.apache.flink.table.planner.codegen.agg.batch.AggWithoutKeysCodeGenerator;
 import org.apache.flink.table.planner.codegen.agg.batch.HashAggCodeGenerator;
-import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenHashAgg;
-import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenLocalHashAgg;
-import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenSupport;
+import org.apache.flink.table.planner.codegen.fusion.FusionCodegenSpec;
+import org.apache.flink.table.planner.codegen.fusion.HashAggFusionCodegenSpec;
+import org.apache.flink.table.planner.codegen.fusion.LocalHashAggFusionCodegenSpec;
 import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
@@ -63,8 +63,6 @@ public class BatchExecHashAggregate extends ExecNodeBase<RowData>
     private final boolean isMerge;
     private final boolean isFinal;
     private final boolean supportAdaptiveLocalHashAgg;
-
-    private OperatorFusionCodegenSupport hashAgg;
 
     public BatchExecHashAggregate(
             ReadableConfig tableConfig,
@@ -171,15 +169,15 @@ public class BatchExecHashAggregate extends ExecNodeBase<RowData>
     }
 
     @Override
-    public boolean supportMultipleCodegen() {
+    public boolean supportFusionCodegen() {
         // We don't support operator fusion codegen when aggCalls has filter now
         return Stream.of(aggCalls).noneMatch(AggregateCall::hasFilter);
     }
 
     @Override
-    protected OperatorFusionCodegenSupport translateToCodegenOpInternal(
+    protected FusionCodegenSpec translateToFusionCodegenSpecInternal(
             PlannerBase planner, ExecNodeConfig config) {
-        OperatorFusionCodegenSupport input = getInputEdges().get(0).translateToCodegenOp(planner);
+        FusionCodegenSpec input = getInputEdges().get(0).translateToCodegenOp(planner);
         final RowType outputRowType = (RowType) getOutputType();
         final CodeGeneratorContext ctx =
                 new CodeGeneratorContext(config, planner.getFlinkContext().getClassLoader());
@@ -204,9 +202,10 @@ public class BatchExecHashAggregate extends ExecNodeBase<RowData>
                 (int)
                         config.get(ExecutionConfigOptions.TABLE_EXEC_SPILL_COMPRESSION_BLOCK_SIZE)
                                 .getBytes();
+        FusionCodegenSpec hashAgg;
         if (isFinal) {
             hashAgg =
-                    new OperatorFusionCodegenHashAgg(
+                    new HashAggFusionCodegenSpec(
                             ctx,
                             planner.createRelBuilder(),
                             aggInfos,
@@ -220,7 +219,7 @@ public class BatchExecHashAggregate extends ExecNodeBase<RowData>
                             compressionBlockSize);
         } else {
             hashAgg =
-                    new OperatorFusionCodegenLocalHashAgg(
+                    new LocalHashAggFusionCodegenSpec(
                             ctx,
                             planner.createRelBuilder(),
                             aggInfos,

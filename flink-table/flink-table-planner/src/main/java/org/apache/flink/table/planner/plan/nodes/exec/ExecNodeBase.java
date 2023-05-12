@@ -27,7 +27,7 @@ import org.apache.flink.streaming.runtime.partitioner.GlobalPartitioner;
 import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.api.config.ExecutionConfigOptions;
 import org.apache.flink.table.delegation.Planner;
-import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenSupport;
+import org.apache.flink.table.planner.codegen.fusion.FusionCodegenSpec;
 import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.plan.nodes.exec.serde.ConfigurationJsonSerializerFilter;
 import org.apache.flink.table.planner.plan.nodes.exec.utils.TransformationMetadata;
@@ -74,7 +74,7 @@ public abstract class ExecNodeBase<T> implements ExecNode<T> {
 
     private transient Transformation<T> transformation;
 
-    private transient OperatorFusionCodegenSupport codegenSupport;
+    private transient FusionCodegenSpec codegenSupport;
 
     /** Holds the context information (id, name, version) as deserialized from a JSON plan. */
     @JsonProperty(value = FIELD_NAME_TYPE, access = JsonProperty.Access.WRITE_ONLY)
@@ -179,10 +179,15 @@ public abstract class ExecNodeBase<T> implements ExecNode<T> {
     }
 
     @Override
-    public OperatorFusionCodegenSupport translateToCodegenOp(Planner planner) {
+    public boolean supportFusionCodegen() {
+        return false;
+    }
+
+    @Override
+    public FusionCodegenSpec translateToFusionCodegenSpec(Planner planner) {
         if (codegenSupport == null) {
             codegenSupport =
-                    translateToCodegenOpInternal(
+                    translateToFusionCodegenSpecInternal(
                             (PlannerBase) planner,
                             ExecNodeConfig.of(
                                     ((PlannerBase) planner).getTableConfig(),
@@ -224,9 +229,9 @@ public abstract class ExecNodeBase<T> implements ExecNode<T> {
      *     retrieving configuration from the {@code planner}. For more details check {@link
      *     ExecNodeConfig}.
      */
-    protected OperatorFusionCodegenSupport translateToCodegenOpInternal(
+    protected FusionCodegenSpec translateToFusionCodegenSpecInternal(
             PlannerBase planner, ExecNodeConfig config) {
-        throw new TableException("This node doesn't support multiple operator fusion codegen now.");
+        throw new TableException("This ExecNode doesn't support operator fusion codegen now.");
     }
 
     private boolean inputsContainSingleton(Transformation<T> transformation) {

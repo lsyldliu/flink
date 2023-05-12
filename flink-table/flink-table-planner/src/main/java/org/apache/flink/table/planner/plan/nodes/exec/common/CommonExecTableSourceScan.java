@@ -203,6 +203,10 @@ public abstract class CommonExecTableSourceScan extends ExecNodeBase<RowData>
                 parallelismConfigured);
     }
 
+    public String getTableName() {
+        return tableSourceSpec.getContextResolvedTable().getIdentifier().getObjectName();
+    }
+
     /**
      * Creates a {@link Transformation} based on the given {@link InputFormat}. The implementation
      * is different for streaming mode and batch mode.

@@ -27,8 +27,8 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
 import org.apache.flink.table.planner.codegen.LongHashJoinGenerator;
 import org.apache.flink.table.planner.codegen.ProjectionCodeGenerator;
-import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenHashJoin;
-import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenSupport;
+import org.apache.flink.table.planner.codegen.fusion.FusionCodegenSpec;
+import org.apache.flink.table.planner.codegen.fusion.HashJoinFusionCodegenSpec;
 import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeBase;
@@ -64,8 +64,6 @@ public class BatchExecHashJoin extends ExecNodeBase<RowData>
     private final long estimatedLeftRowCount;
     private final long estimatedRightRowCount;
     private final boolean tryDistinctBuildRow;
-
-    private OperatorFusionCodegenHashJoin codegenHashJoin;
 
     public BatchExecHashJoin(
             ReadableConfig tableConfig,
@@ -299,12 +297,10 @@ public class BatchExecHashJoin extends ExecNodeBase<RowData>
     }
 
     @Override
-    protected OperatorFusionCodegenSupport translateToCodegenOpInternal(
+    protected FusionCodegenSpec translateToFusionCodegenSpecInternal(
             PlannerBase planner, ExecNodeConfig config) {
-        OperatorFusionCodegenSupport leftInput =
-                getInputEdges().get(0).translateToCodegenOp(planner);
-        OperatorFusionCodegenSupport rightInput =
-                getInputEdges().get(1).translateToCodegenOp(planner);
+        FusionCodegenSpec leftInput = getInputEdges().get(0).translateToCodegenOp(planner);
+        FusionCodegenSpec rightInput = getInputEdges().get(1).translateToCodegenOp(planner);
         boolean compressionEnabled =
                 config.get(ExecutionConfigOptions.TABLE_EXEC_SPILL_COMPRESSION_ENABLED);
         int compressionBlockSize =
@@ -312,8 +308,8 @@ public class BatchExecHashJoin extends ExecNodeBase<RowData>
                         config.get(ExecutionConfigOptions.TABLE_EXEC_SPILL_COMPRESSION_BLOCK_SIZE)
                                 .getBytes();
         long managedMemory = getLargeManagedMemory(joinSpec.getJoinType(), config);
-        codegenHashJoin =
-                new OperatorFusionCodegenHashJoin(
+        HashJoinFusionCodegenSpec codegenHashJoin =
+                new HashJoinFusionCodegenSpec(
                         new CodeGeneratorContext(
                                 config, planner.getFlinkContext().getClassLoader()),
                         (RowType) getOutputType(),
@@ -333,7 +329,7 @@ public class BatchExecHashJoin extends ExecNodeBase<RowData>
     }
 
     @Override
-    public boolean supportMultipleCodegen() {
+    public boolean supportFusionCodegen() {
         RowType leftType = (RowType) getInputEdges().get(0).getOutputType();
         LogicalType[] keyFieldTypes =
                 IntStream.of(joinSpec.getLeftKeys())

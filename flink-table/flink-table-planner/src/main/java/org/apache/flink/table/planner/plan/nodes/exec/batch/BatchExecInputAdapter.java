@@ -22,8 +22,8 @@ import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
-import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenInput;
-import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenSupport;
+import org.apache.flink.table.planner.codegen.fusion.FusionCodegenSpec;
+import org.apache.flink.table.planner.codegen.fusion.InputFusionCodegenSpec;
 import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeBase;
@@ -40,9 +40,10 @@ import java.util.Collections;
 public class BatchExecInputAdapter extends ExecNodeBase<RowData>
         implements BatchExecNode<RowData>, SingleTransformationTranslator<RowData> {
 
-    protected OperatorFusionCodegenInput codegenInput;
+    protected final int multipleInputId;
 
     public BatchExecInputAdapter(
+            int multipleInputId,
             ReadableConfig tableConfig,
             InputProperty inputProperty,
             LogicalType outputType,
@@ -54,6 +55,7 @@ public class BatchExecInputAdapter extends ExecNodeBase<RowData>
                 Collections.singletonList(inputProperty),
                 outputType,
                 description);
+        this.multipleInputId = multipleInputId;
     }
 
     @Override
@@ -63,26 +65,16 @@ public class BatchExecInputAdapter extends ExecNodeBase<RowData>
     }
 
     @Override
-    public boolean supportMultipleCodegen() {
+    public boolean supportFusionCodegen() {
         return true;
     }
 
     @Override
-    protected OperatorFusionCodegenSupport translateToCodegenOpInternal(
+    protected FusionCodegenSpec translateToFusionCodegenSpecInternal(
             PlannerBase planner, ExecNodeConfig config) {
-        assert (codegenInput != null);
-        return codegenInput;
-    }
-
-    @Override
-    public OperatorFusionCodegenSupport getInputCodegenOp(
-            int multipleInputId, PlannerBase planner, ExecNodeConfig config) {
-        codegenInput =
-                new OperatorFusionCodegenInput(
-                        new CodeGeneratorContext(
-                                config, planner.getFlinkContext().getClassLoader()),
-                        multipleInputId,
-                        (RowType) getOutputType());
-        return codegenInput;
+        return new InputFusionCodegenSpec(
+                new CodeGeneratorContext(config, planner.getFlinkContext().getClassLoader()),
+                multipleInputId,
+                (RowType) getOutputType());
     }
 }

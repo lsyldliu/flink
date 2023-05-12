@@ -18,25 +18,12 @@
 
 package org.apache.flink.table.planner.plan.nodes.exec;
 
-import org.apache.flink.annotation.Internal;
-import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.table.delegation.Planner;
+import org.apache.flink.table.planner.codegen.fusion.FusionCodegenSpec;
 
-/**
- * An {@link ExecNodeTranslator} is responsible for translating an {@link ExecNode} to {@link
- * Transformation}s.
- *
- * @param <T> The type of the elements that result from this translator.
- */
-@Internal
-public interface ExecNodeTranslator<T> {
+public interface FusionCodegenExecNode {
 
-    /**
-     * Translates this node into a {@link Transformation}.
-     *
-     * <p>NOTE: This method should return same translate result if called multiple times.
-     *
-     * @param planner The {@link Planner} of the translated graph.
-     */
-    Transformation<T> translateToPlan(Planner planner);
+    boolean supportFusionCodegen();
+
+    FusionCodegenSpec translateToFusionCodegenSpec(Planner planner);
 }

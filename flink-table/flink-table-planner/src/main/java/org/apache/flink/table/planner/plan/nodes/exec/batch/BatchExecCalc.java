@@ -21,8 +21,8 @@ package org.apache.flink.table.planner.plan.nodes.exec.batch;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
-import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenCalc;
-import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenSupport;
+import org.apache.flink.table.planner.codegen.fusion.CalcFusionCodegenSpec;
+import org.apache.flink.table.planner.codegen.fusion.FusionCodegenSpec;
 import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNodeConfig;
@@ -43,8 +43,6 @@ import java.util.Optional;
 
 /** Batch {@link ExecNode} for Calc. */
 public class BatchExecCalc extends CommonExecCalc implements BatchExecNode<RowData> {
-
-    private OperatorFusionCodegenCalc codegenCalc;
 
     public BatchExecCalc(
             ReadableConfig tableConfig,
@@ -67,11 +65,11 @@ public class BatchExecCalc extends CommonExecCalc implements BatchExecNode<RowDa
     }
 
     @Override
-    protected OperatorFusionCodegenSupport translateToCodegenOpInternal(
+    protected FusionCodegenSpec translateToFusionCodegenSpecInternal(
             PlannerBase planner, ExecNodeConfig config) {
-        OperatorFusionCodegenSupport input = getInputEdges().get(0).translateToCodegenOp(planner);
-        codegenCalc =
-                new OperatorFusionCodegenCalc(
+        FusionCodegenSpec input = getInputEdges().get(0).translateToCodegenOp(planner);
+        CalcFusionCodegenSpec codegenCalc =
+                new CalcFusionCodegenSpec(
                         new CodeGeneratorContext(
                                 config, planner.getFlinkContext().getClassLoader()),
                         (RowType) getOutputType(),
@@ -83,7 +81,7 @@ public class BatchExecCalc extends CommonExecCalc implements BatchExecNode<RowDa
     }
 
     @Override
-    public boolean supportMultipleCodegen() {
+    public boolean supportFusionCodegen() {
         return true;
     }
 }

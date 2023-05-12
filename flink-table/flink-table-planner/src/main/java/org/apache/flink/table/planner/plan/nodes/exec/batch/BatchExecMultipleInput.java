@@ -20,14 +20,15 @@ package org.apache.flink.table.planner.plan.nodes.exec.batch;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.dag.Transformation;
+import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
 import org.apache.flink.streaming.api.transformations.MultipleInputTransformation;
+import org.apache.flink.streaming.api.transformations.SourceTransformation;
 import org.apache.flink.table.api.TableConfig;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.planner.codegen.CodeGeneratorContext;
-import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenOutput;
-import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenSupport;
+import org.apache.flink.table.planner.codegen.fusion.RootFusionCodegenSpec;
 import org.apache.flink.table.planner.delegation.PlannerBase;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecEdge;
 import org.apache.flink.table.planner.plan.nodes.exec.ExecNode;
@@ -51,10 +52,9 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -97,18 +97,25 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
 
     private static final Logger LOG = LoggerFactory.getLogger(BatchExecMultipleInput.class);
 
+    private static final AtomicLong totalPlanTime = new AtomicLong(0);
     private static final AtomicLong totalMultipleNode = new AtomicLong(0);
     private static final AtomicLong codegenMultipleNode = new AtomicLong(0);
     private static final Map<Integer, Integer> nodeInputMap = new ConcurrentHashMap<>();
     private static final Map<Integer, Integer> codegenNodeInputMap = new ConcurrentHashMap<>();
+    private static final Map<String, Map<Integer, Integer>> queryNodeInputMap =
+            new ConcurrentHashMap<>();
+    private static final Map<String, Map<Integer, Integer>> queryCodegenNodeInputMap =
+            new ConcurrentHashMap<>();
 
     private final ExecNode<?> rootNode;
+    private final List<ExecNode<?>> memberExecNodes;
     private final List<ExecEdge> originalEdges;
 
     public BatchExecMultipleInput(
             ReadableConfig tableConfig,
             List<InputProperty> inputProperties,
             ExecNode<?> rootNode,
+            List<ExecNode<?>> memberExecNodes,
             List<ExecEdge> originalEdges,
             String description) {
         super(
@@ -119,6 +126,7 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
                 rootNode.getOutputType(),
                 description);
         this.rootNode = rootNode;
+        this.memberExecNodes = memberExecNodes;
         checkArgument(inputProperties.size() == originalEdges.size());
         this.originalEdges = originalEdges;
     }
@@ -126,6 +134,7 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
     @Override
     protected Transformation<RowData> translateToPlanInternal(
             PlannerBase planner, ExecNodeConfig config) {
+        Long planStartTime = System.currentTimeMillis();
         List<Transformation<?>> inputTransforms = new ArrayList<>();
         final List<ExecEdge> inputEdges = getInputEdges();
         for (ExecEdge inputEdge : inputEdges) {
@@ -140,20 +149,31 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
         totalMultipleNode.incrementAndGet();
         int inputCnt = inputTransforms.size();
         nodeInputMap.put(inputCnt, nodeInputMap.getOrDefault(inputCnt, 0) + 1);
+        String jobName = config.get(PipelineOptions.NAME);
+        if (jobName == null) {
+            jobName = "query";
+        }
+        // query multiple input distribution
+        Map<Integer, Integer> queryMultipleInputCnt =
+                queryNodeInputMap.getOrDefault(jobName, new HashMap<>());
+        queryMultipleInputCnt.put(inputCnt, queryMultipleInputCnt.getOrDefault(inputCnt, 0) + 1);
+        queryNodeInputMap.put(jobName, queryMultipleInputCnt);
+
         MultipleInputTransformation<RowData> multipleInputTransform = null;
         long memoryBytes = 0;
         boolean multipleCodegenEnabled = config.get(TABLE_EXEC_MULTIPLE_CODEGEN_ENABLED);
         long codegenStartTime = System.currentTimeMillis();
-        if (multipleCodegenEnabled && supportMultipleCodegen(rootNode, originalEdges)) {
+        boolean unsupportNode = unsupportedMultipleInput(config, readOrders);
+        if (multipleCodegenEnabled && !unsupportNode && supportMultipleFusionCodegen()) {
             // multiple operator fusion codegen
             final List<MultipleInputSpec> multipleInputSpecs = new ArrayList<>();
-            final List<OperatorFusionCodegenSupport> codegenSupportInputs = new ArrayList<>();
             int i = 0;
             for (ExecEdge inputEdge : originalEdges) {
                 int multipleInputId = i + 1;
                 BatchExecNode<RowData> source = (BatchExecNode<RowData>) inputEdge.getSource();
                 BatchExecInputAdapter inputAdapter =
                         new BatchExecInputAdapter(
+                                multipleInputId,
                                 TableConfig.getDefault(),
                                 InputProperty.builder().priority(readOrders[i]).build(),
                                 source.getOutputType(),
@@ -169,6 +189,7 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
                         // insert a columnar to row ExecNode
                         inputAdapter =
                                 new BatchExecColumnarToRow(
+                                        multipleInputId,
                                         TableConfig.getDefault(),
                                         InputProperty.builder().priority(readOrders[i]).build(),
                                         source.getOutputType(),
@@ -181,29 +202,24 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
                                 ExecEdge.builder().source(source).target(inputAdapter).build()));
 
                 BatchExecNode<RowData> target = (BatchExecNode<RowData>) inputEdge.getTarget();
-                int targetInputIdx = 0;
-                for (ExecEdge targetInputEdge : target.getInputEdges()) {
-                    if (inputEdge.equals(targetInputEdge)) {
-                        target.replaceInputEdge(
-                                targetInputIdx,
-                                ExecEdge.builder().source(inputAdapter).target(target).build());
-                        break;
-                    }
-                    targetInputIdx++;
-                }
-                codegenSupportInputs.add(
-                        inputAdapter.getInputCodegenOp(multipleInputId, planner, config));
+                int edgeIdxInTargetNode = target.getInputEdges().indexOf(inputEdge);
+                checkArgument(edgeIdxInTargetNode >= 0);
+
+                target.replaceInputEdge(
+                        edgeIdxInTargetNode,
+                        ExecEdge.builder().source(inputAdapter).target(target).build());
+
                 // The input id and read order
                 multipleInputSpecs.add(new MultipleInputSpec(multipleInputId, readOrders[i]));
                 i++;
             }
 
             // wrap root operator of multiple codegen
-            OperatorFusionCodegenOutput codegenRootOp =
-                    new OperatorFusionCodegenOutput(
+            RootFusionCodegenSpec codegenRootOp =
+                    new RootFusionCodegenSpec(
                             new CodeGeneratorContext(
                                     config, planner.getFlinkContext().getClassLoader()));
-            codegenRootOp.addInput(rootNode.translateToCodegenOp(planner));
+            codegenRootOp.addInput(rootNode.translateToFusionCodegenSpec(planner));
 
             // generate multiple input operator
             Tuple2<OperatorFusionCodegenFactory<RowData>, Object> multipleOperatorTuple =
@@ -228,6 +244,12 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
                             System.currentTimeMillis() - codegenStartTime));
             codegenMultipleNode.incrementAndGet();
             codegenNodeInputMap.put(inputCnt, codegenNodeInputMap.getOrDefault(inputCnt, 0) + 1);
+            // query multiple input codegen distribution
+            Map<Integer, Integer> queryMultipleInputCodegen =
+                    queryCodegenNodeInputMap.getOrDefault(jobName, new HashMap<>());
+            queryMultipleInputCodegen.put(
+                    inputCnt, queryMultipleInputCodegen.getOrDefault(inputCnt, 0) + 1);
+            queryCodegenNodeInputMap.put(jobName, queryMultipleInputCodegen);
         } else {
             final Transformation<?> outputTransform = rootNode.translateToPlan(planner);
 
@@ -275,6 +297,12 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
         ExecNodeUtil.setManagedMemoryWeight(multipleInputTransform, memoryBytes);
         // set chaining strategy for source chaining
         multipleInputTransform.setChainingStrategy(ChainingStrategy.HEAD_WITH_SOURCES);
+
+        long planInterval = System.currentTimeMillis() - planStartTime;
+        System.out.println(
+                String.format(
+                        "Total BatchExecMultiInput translate to plan spend time: %s.",
+                        totalPlanTime.addAndGet(planInterval)));
         System.out.println(
                 String.format(
                         "Total BatchExecMultiInput node num: %s, support codegen node num: %s.",
@@ -283,6 +311,10 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
                 String.format(
                         "Total BatchExecMultiInput node distribution: %s, support codegen node distribution: %s.",
                         nodeInputMap, codegenNodeInputMap));
+        System.out.println(
+                String.format(
+                        "Every query BatchExecMultiInput node distribution: %s, support codegen node distribution: %s.",
+                        queryNodeInputMap, queryCodegenNodeInputMap));
         return multipleInputTransform;
     }
 
@@ -312,26 +344,12 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
         return rootNode;
     }
 
-    private boolean supportMultipleCodegen(ExecNode rootNode, List<ExecEdge> multipleInputEdges) {
-        Set<ExecNode> innerNodes = new HashSet<>();
-        getAllExecNodes(innerNodes, rootNode, multipleInputEdges);
-
-        return innerNodes.stream()
-                .map(BatchExecNode.class::cast)
-                .map(BatchExecNode::supportMultipleCodegen)
-                .reduce(true, (n1, n2) -> n1 && n2);
-    }
-
-    private void getAllExecNodes(
-            Set<ExecNode> innerNodes, ExecNode currentNode, List<ExecEdge> multipleInputEdges) {
-        List<ExecEdge> inputEdges = currentNode.getInputEdges();
-        for (ExecEdge inputEdge : inputEdges) {
-            // If this edge is the input edge of multiple input, stop it
-            if (!multipleInputEdges.contains(inputEdge)) {
-                getAllExecNodes(innerNodes, inputEdge.getSource(), multipleInputEdges);
-            }
-        }
-        innerNodes.add(currentNode);
+    private boolean supportMultipleFusionCodegen() {
+        boolean supportCodegen =
+                memberExecNodes.stream()
+                        .map(ExecNode::supportFusionCodegen)
+                        .reduce(true, (n1, n2) -> n1 && n2);
+        return supportCodegen;
     }
 
     private Pair<Integer, Integer> getInputParallelism(
@@ -350,5 +368,30 @@ public class BatchExecMultipleInput extends ExecNodeBase<RowData>
             }
         }
         return Pair.of(parallelism, maxParallelism);
+    }
+
+    private boolean unsupportedMultipleInput(ExecNodeConfig config, int[] readOrders) {
+        boolean unsupportedNode = false;
+        String jobName = config.get(PipelineOptions.NAME);
+        if ("q54.sql".equals(jobName)) {
+            if (readOrders.length == 3 && readOrders[2] == 0) {
+                unsupportedNode = true;
+            }
+        }
+        return unsupportedNode;
+    }
+
+    private boolean suppportColumnarRead(String jobName, String tableName) {
+        if (("q39a.sql".equals(jobName) || "q39b.sql".equals(jobName))
+                && "inventory".equals(tableName)) {
+            return false;
+        }
+
+        if (("q44.sql".equals(jobName) || "q58.sql".equals(jobName) || "q83.sql".equals(jobName))
+                && "item".equals(tableName)) {
+            return false;
+        }
+
+        return true;
     }
 }
