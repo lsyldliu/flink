@@ -22,7 +22,7 @@ import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.delegation.Planner;
-import org.apache.flink.table.planner.codegen.fusion.OperatorFusionCodegenSupport;
+import org.apache.flink.table.planner.codegen.fusion.FusionCodegenSpec;
 import org.apache.flink.table.planner.plan.nodes.exec.batch.BatchExecNode;
 import org.apache.flink.table.planner.plan.nodes.exec.visitor.ExecNodeVisitor;
 import org.apache.flink.table.types.logical.LogicalType;
@@ -103,7 +103,12 @@ public class TestingBatchExecNode implements BatchExecNode<RowData> {
     }
 
     @Override
-    public OperatorFusionCodegenSupport translateToCodegenOp(Planner planner) {
+    public boolean supportFusionCodegen() {
+        return false;
+    }
+
+    @Override
+    public FusionCodegenSpec translateToFusionCodegenSpec(Planner planner) {
         throw new TableException("Unsupported operation.");
     }
 
