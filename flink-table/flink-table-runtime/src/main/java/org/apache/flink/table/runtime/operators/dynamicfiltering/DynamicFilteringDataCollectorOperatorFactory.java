@@ -97,4 +97,9 @@ public class DynamicFilteringDataCollectorOperatorFactory
         return new DynamicFilteringDataCollectorOperatorCoordinator.Provider(
                 operatorID, new ArrayList<>(dynamicFilteringDataListenerIDs));
     }
+
+    @Override
+    public String getOperatorDesc() {
+        return "DynamicFilteringDataCollectorOperator";
+    }
 }

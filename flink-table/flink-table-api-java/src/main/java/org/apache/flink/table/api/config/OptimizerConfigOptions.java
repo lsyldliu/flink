@@ -102,6 +102,16 @@ public class OptimizerConfigOptions {
                                     + TABLE_OPTIMIZER_REUSE_SUB_PLAN_ENABLED.key()
                                     + " is true.");
 
+    public static final ConfigOption<Boolean> TABLE_OPTIMIZER_SCAN_SOURCE_ENABLED =
+            key("table.optimizer.reuse-scan-enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "When it is true, the optimizer will try to find out duplicated table sources and "
+                                    + "reuse them. This works only when "
+                                    + TABLE_OPTIMIZER_REUSE_SUB_PLAN_ENABLED.key()
+                                    + " is true.");
+
     @Documentation.TableOption(execMode = Documentation.ExecMode.BATCH)
     public static final ConfigOption<Boolean> TABLE_OPTIMIZER_SOURCE_AGGREGATE_PUSHDOWN_ENABLED =
             key("table.optimizer.source.aggregate-pushdown-enabled")

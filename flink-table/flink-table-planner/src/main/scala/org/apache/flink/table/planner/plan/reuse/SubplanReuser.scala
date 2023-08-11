@@ -63,8 +63,11 @@ object SubplanReuser {
     val tableSourceReuseEnabled =
       tableConfig.get(OptimizerConfigOptions.TABLE_OPTIMIZER_REUSE_SOURCE_ENABLED)
 
+    val scanReuseEnabled =
+      tableConfig.get(OptimizerConfigOptions.TABLE_OPTIMIZER_SCAN_SOURCE_ENABLED)
+
     var newRels = rels
-    if (tableSourceReuseEnabled) {
+    if (tableSourceReuseEnabled && scanReuseEnabled) {
       newRels = new ScanReuser(flinkContext, flinkTypeFactory).reuseDuplicatedScan(rels)
     }
 
