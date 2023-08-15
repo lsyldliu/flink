@@ -155,10 +155,7 @@ public class FlinkRuntimeFilterProgram implements FlinkOptimizeProgram<BatchOpti
     private static Join tryInjectRuntimeFilter(Join join) {
 
         // check supported join type
-        if (join.getJoinType() != JoinRelType.INNER
-                && join.getJoinType() != JoinRelType.SEMI
-                && join.getJoinType() != JoinRelType.LEFT
-                && join.getJoinType() != JoinRelType.RIGHT) {
+        if (!(isSuitableJoinType(join.getJoinType()))) {
             return join;
         }
 
@@ -215,7 +212,7 @@ public class FlinkRuntimeFilterProgram implements FlinkOptimizeProgram<BatchOpti
             BuildSideInfo suitableBuildInfo = suitableBuildOpt.get();
             RelNode newProbe =
                     tryPushDownProbeAndInjectRuntimeFilter(
-                            probeSide, probeIndices, suitableBuildInfo);
+                            probeSide, probeIndices, suitableBuildInfo, false);
             if (leftIsBuild) {
                 return join.copy(join.getTraitSet(), Arrays.asList(buildSide, newProbe));
             } else {
@@ -325,13 +322,19 @@ public class FlinkRuntimeFilterProgram implements FlinkOptimizeProgram<BatchOpti
         } else if (rel instanceof Join) {
             // try to push the builder to one input of join
             Join join = (Join) rel;
-            if (!(join.getLeft() instanceof Exchange) && !(join.getRight() instanceof Exchange)) {
+            if (!isSuitableJoinType(join.getJoinType())) {
                 return Optional.empty();
             }
 
             Tuple2<ImmutableIntList, ImmutableIntList> tuple2 = getInputIndices(join, buildIndices);
             ImmutableIntList leftIndices = tuple2.f0;
             ImmutableIntList rightIndices = tuple2.f1;
+
+            if (join.getJoinType() == JoinRelType.LEFT) {
+                rightIndices = ImmutableIntList.of();
+            } else if (join.getJoinType() == JoinRelType.RIGHT) {
+                leftIndices = ImmutableIntList.of();
+            }
 
             if (leftIndices.isEmpty() && rightIndices.isEmpty()) {
                 return Optional.empty();
@@ -395,7 +398,10 @@ public class FlinkRuntimeFilterProgram implements FlinkOptimizeProgram<BatchOpti
      * @return the new probe side wit runtime filter
      */
     private static RelNode tryPushDownProbeAndInjectRuntimeFilter(
-            RelNode rel, ImmutableIntList probeIndices, BuildSideInfo buildSideInfo) {
+            RelNode rel,
+            ImmutableIntList probeIndices,
+            BuildSideInfo buildSideInfo,
+            boolean filterHasBenefit) {
         if (rel instanceof BatchPhysicalRuntimeFilter) {
             // do nothing, return current probe side directly. Because we don't inject more than
             // once runtime filter at the same place
@@ -407,7 +413,7 @@ public class FlinkRuntimeFilterProgram implements FlinkOptimizeProgram<BatchOpti
                     exchange.getTraitSet(),
                     Collections.singletonList(
                             tryPushDownProbeAndInjectRuntimeFilter(
-                                    exchange.getInput(), probeIndices, buildSideInfo)));
+                                    exchange.getInput(), probeIndices, buildSideInfo, true)));
         } else if (rel instanceof Calc) {
             // try to push the probe side to the input of projection
             Calc calc = ((Calc) rel);
@@ -422,7 +428,10 @@ public class FlinkRuntimeFilterProgram implements FlinkOptimizeProgram<BatchOpti
                         calc.getTraitSet(),
                         Collections.singletonList(
                                 tryPushDownProbeAndInjectRuntimeFilter(
-                                        calc.getInput(), inputIndices, buildSideInfo)));
+                                        calc.getInput(),
+                                        inputIndices,
+                                        buildSideInfo,
+                                        filterHasBenefit)));
             }
         } else if (rel instanceof Join) {
             // try to push the probe side to the all inputs of join
@@ -438,13 +447,13 @@ public class FlinkRuntimeFilterProgram implements FlinkOptimizeProgram<BatchOpti
                 if (!leftIndices.isEmpty()) {
                     leftSide =
                             tryPushDownProbeAndInjectRuntimeFilter(
-                                    leftSide, leftIndices, buildSideInfo);
+                                    leftSide, leftIndices, buildSideInfo, true);
                 }
 
                 if (!rightIndices.isEmpty()) {
                     rightSide =
                             tryPushDownProbeAndInjectRuntimeFilter(
-                                    rightSide, rightIndices, buildSideInfo);
+                                    rightSide, rightIndices, buildSideInfo, true);
                 }
 
                 return join.copy(join.getTraitSet(), Arrays.asList(leftSide, rightSide));
@@ -463,7 +472,8 @@ public class FlinkRuntimeFilterProgram implements FlinkOptimizeProgram<BatchOpti
                                                 probeIndices.stream()
                                                         .map(index -> agg.grouping()[index])
                                                         .collect(Collectors.toList())),
-                                        buildSideInfo)));
+                                        buildSideInfo,
+                                        true)));
             }
         } else if (rel instanceof Union) {
             // try to push the probe side to all inputs of union
@@ -471,7 +481,8 @@ public class FlinkRuntimeFilterProgram implements FlinkOptimizeProgram<BatchOpti
             List<RelNode> newInputs = new ArrayList<>();
             for (RelNode input : union.getInputs()) {
                 newInputs.add(
-                        tryPushDownProbeAndInjectRuntimeFilter(input, probeIndices, buildSideInfo));
+                        tryPushDownProbeAndInjectRuntimeFilter(
+                                input, probeIndices, buildSideInfo, filterHasBenefit));
             }
             return union.copy(union.getTraitSet(), newInputs, union.all);
         } else {
@@ -479,11 +490,18 @@ public class FlinkRuntimeFilterProgram implements FlinkOptimizeProgram<BatchOpti
             // we may find more cases later
         }
 
-        return createNewProbeWithRuntimeFilter(
-                ignoreExchange(buildSideInfo.buildSide),
-                ignoreExchange(rel),
-                buildSideInfo.buildIndices,
-                probeIndices);
+        if (filterHasBenefit) {
+            return createNewProbeWithRuntimeFilter(
+                    ignoreExchange(buildSideInfo.buildSide),
+                    ignoreExchange(rel),
+                    buildSideInfo.buildIndices,
+                    probeIndices);
+        } else {
+            // If the probe side is a direct table source, or only simple Calc, no other operations,
+            // we will not inject runtime filter, because we believe the benefit to be small or even
+            // negative
+            return rel;
+        }
     }
 
     private static BatchPhysicalExchange createExchange(
@@ -674,5 +692,13 @@ public class FlinkRuntimeFilterProgram implements FlinkOptimizeProgram<BatchOpti
     private static double getMinFilterRatio(RelNode relNode) {
         return unwrapTableConfig(relNode)
                 .get(OptimizerConfigOptions.TABLE_OPTIMIZER_RUNTIME_FILTER_MIN_FILTER_RATIO);
+    }
+
+    public static boolean isSuitableJoinType(JoinRelType joinType) {
+        // check supported join type
+        return joinType == JoinRelType.INNER
+                || joinType == JoinRelType.SEMI
+                || joinType == JoinRelType.LEFT
+                || joinType == JoinRelType.RIGHT;
     }
 }
