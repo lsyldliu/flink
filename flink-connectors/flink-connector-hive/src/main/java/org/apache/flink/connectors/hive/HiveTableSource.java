@@ -170,20 +170,17 @@ public class HiveTableSource
                             catalogTable.getPartitionKeys(),
                             remainingPartitions);
 
-            int parallelism = 1000;
-            if (tablePath.getObjectName().equals("date_dim")) {
-                parallelism = 1;
-            }
-            /*                    new HiveParallelismInference(tablePath, flinkConf)
-            .infer(
-                    () ->
-                            HiveSourceFileEnumerator.getNumFiles(
-                                    hivePartitionsToRead, jobConf),
-                    () ->
-                            HiveSourceFileEnumerator.createInputSplits(
-                                            0, hivePartitionsToRead, jobConf, true)
-                                    .size())
-            .limit(limit);*/
+            int parallelism =
+                    new HiveParallelismInference(tablePath, flinkConf)
+                            .infer(
+                                    () ->
+                                            HiveSourceFileEnumerator.getNumFiles(
+                                                    hivePartitionsToRead, jobConf),
+                                    () ->
+                                            HiveSourceFileEnumerator.createInputSplits(
+                                                            0, hivePartitionsToRead, jobConf, true)
+                                                    .size())
+                            .limit(limit);
             return toDataStreamSource(
                             execEnv,
                             sourceBuilder

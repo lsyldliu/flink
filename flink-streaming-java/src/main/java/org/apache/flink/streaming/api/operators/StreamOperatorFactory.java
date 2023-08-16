@@ -87,8 +87,4 @@ public interface StreamOperatorFactory<OUT> extends Serializable {
 
     /** Returns the runtime class of the stream operator. */
     Class<? extends StreamOperator> getStreamOperatorClass(ClassLoader classLoader);
-
-    default String getOperatorDesc() {
-        return "Other";
-    }
 }

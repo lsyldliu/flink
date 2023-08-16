@@ -1505,14 +1505,7 @@ public class StreamingJobGraphGenerator {
     public static boolean isChainable(StreamEdge edge, StreamGraph streamGraph) {
         StreamNode downStreamVertex = streamGraph.getTargetVertex(edge);
 
-        boolean inputChainabled = isChainableInput(edge, streamGraph);
-        if ("DynamicFilteringDataCollectorOperator"
-                .equals(downStreamVertex.getOperatorFactory().getOperatorDesc())) {
-            LOG.info(
-                    "DynamicFilteringDataCollectorOperator is chainable with input: {}",
-                    inputChainabled);
-        }
-        return downStreamVertex.getInEdges().size() == 1 && inputChainabled;
+        return downStreamVertex.getInEdges().size() == 1 && isChainableInput(edge, streamGraph);
     }
 
     private static boolean isChainableInput(StreamEdge edge, StreamGraph streamGraph) {
@@ -1569,11 +1562,6 @@ public class StreamingJobGraphGenerator {
         // point
         if (downStreamOperator instanceof YieldingOperatorFactory
                 && getHeadOperator(upStreamVertex, streamGraph).isLegacySource()) {
-            LOG.warn(
-                    "yielding upstreamVertex chained with downStreamVertex: {}, upstreamVertex: {}, downStreamVertex: {}",
-                    false,
-                    upStreamVertex,
-                    downStreamVertex);
             return false;
         }
 
@@ -1584,21 +1572,11 @@ public class StreamingJobGraphGenerator {
         switch (upStreamOperator.getChainingStrategy()) {
             case NEVER:
                 isChainable = false;
-                LOG.warn(
-                        "upStreamOperator NEVER, upstreamVertex chained with downStreamVertex: {}, upstreamVertex: {}, downStreamVertex: {}",
-                        isChainable,
-                        upStreamVertex,
-                        downStreamVertex);
                 break;
             case ALWAYS:
             case HEAD:
             case HEAD_WITH_SOURCES:
                 isChainable = true;
-                LOG.warn(
-                        "upStreamOperator HEAD_WITH_SOURCES, upstreamVertex chained with downStreamVertex: {}, upstreamVertex: {}, downStreamVertex: {}",
-                        isChainable,
-                        upStreamVertex,
-                        downStreamVertex);
                 break;
             default:
                 throw new RuntimeException(
@@ -1609,11 +1587,6 @@ public class StreamingJobGraphGenerator {
             case NEVER:
             case HEAD:
                 isChainable = false;
-                LOG.warn(
-                        "downStreamOperator HEAD, upstreamVertex chained with downStreamVertex: {}, upstreamVertex: {}, downStreamVertex: {}",
-                        isChainable,
-                        upStreamVertex,
-                        downStreamVertex);
                 break;
             case ALWAYS:
                 // keep the value from upstream
@@ -1621,11 +1594,6 @@ public class StreamingJobGraphGenerator {
             case HEAD_WITH_SOURCES:
                 // only if upstream is a source
                 isChainable &= (upStreamOperator instanceof SourceOperatorFactory);
-                LOG.warn(
-                        "downStreamOperator HEAD_WITH_SOURCES, upstreamVertex chained with downStreamVertex: {}, upstreamVertex: {}, downStreamVertex: {}",
-                        isChainable,
-                        upStreamVertex,
-                        downStreamVertex);
                 break;
             default:
                 throw new RuntimeException(
@@ -1634,21 +1602,12 @@ public class StreamingJobGraphGenerator {
 
         // Only vertices with the same parallelism can be chained.
         isChainable &= upStreamVertex.getParallelism() == downStreamVertex.getParallelism();
-        LOG.warn(
-                "parallelism, upstreamVertex chained with downStreamVertex: {}, upstreamVertex: {}, downStreamVertex: {}",
-                isChainable,
-                upStreamVertex,
-                downStreamVertex);
 
         if (!streamGraph.isChainingOfOperatorsWithDifferentMaxParallelismEnabled()) {
             isChainable &=
                     upStreamVertex.getMaxParallelism() == downStreamVertex.getMaxParallelism();
         }
-        LOG.warn(
-                "isChainingOfOperatorsWithDifferentMaxParallelismEnabled, upstreamVertex chained with downStreamVertex: {}, upstreamVertex: {}, downStreamVertex: {}",
-                isChainable,
-                upStreamVertex,
-                downStreamVertex);
+
         return isChainable;
     }
 
