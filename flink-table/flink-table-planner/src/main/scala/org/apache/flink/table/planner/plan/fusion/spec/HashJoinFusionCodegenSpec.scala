@@ -137,11 +137,7 @@ class HashJoinFusionCodegenSpec(
       inputVars: Seq[GeneratedExpression],
       row: GeneratedExpression): String = {
     // initialize hash table related code
-    if (isBroadcast) {
-      codegenHashTable(false)
-    } else {
-      codegenHashTable(true)
-    }
+    codegenHashTable(true)
 
     val (nullCheckBuildCode, nullCheckBuildTerm) = {
       genAnyNullsInKeys(buildKeys, inputVars)
@@ -516,21 +512,16 @@ class HashJoinFusionCodegenSpec(
       buildIterTerm: String,
       row: GeneratedExpression,
       processCode: String): String = {
-    // Broadcast HashJoin doesn't support spill to disk.
-    if (isBroadcast) {
-      processCode
-    } else {
-      // If join key is not null and $buildIterTerm is null indicate the build partition
-      // corresponding to the probe row has spilled to disk, so also spill it to disk.
-      s"""
-         |if(!$anyNull && $buildIterTerm == null) {
-         |   ${row.code}
-         |   $hashTableTerm.insertIntoProbeBuffer(${row.resultTerm});
-         |} else {
-         |  $processCode
-         |}
-         |""".stripMargin
-    }
+    // If join key is not null and $buildIterTerm is null indicate the build partition
+    // corresponding to the probe row has spilled to disk, so also spill it to disk.
+    s"""
+       |if(!$anyNull && $buildIterTerm == null) {
+       |   ${row.code}
+       |   $hashTableTerm.insertIntoProbeBuffer(${row.resultTerm});
+       |} else {
+       |  $processCode
+       |}
+       |""".stripMargin
   }
 
   private def codegenConsumeCode(resultVars: Seq[GeneratedExpression]): String = {
