@@ -100,19 +100,22 @@ class RuntimeFilterFusionCodegenSpec(opCodegenCtx: CodeGeneratorContext, probeIn
           outRowWriter = Option(probeKeyWriterTerm))
         .code
 
+      val found = newName("found")
       val consumeCode = fusionContext.processConsume(null, row.resultTerm)
       s"""
          |${className[Preconditions]}.checkState($buildComplete, "Should build completed.");
          |
+         |boolean $found = true;
          |if ($filterTerm != null) {
          |  // compute the hash code of probe key
          |  $keyProjectionCode
          |  final int hashCode = $probeKeyTerm.hashCode();
-         |    if ($filterTerm.testHash(hashCode)) {
-         |      ${row.code}
-         |      $consumeCode
-         |    }
-         |} else {
+         |  if (!$filterTerm.testHash(hashCode)) {
+         |    $found = false;
+         |  }
+         |}
+         |// if found, call downstream to consume the row
+         |if($found) {
          |  ${row.code}
          |  $consumeCode
          |}

@@ -25,7 +25,7 @@ import org.apache.flink.table.planner.codegen.LongHashJoinGenerator.{genGetLongK
 import org.apache.flink.table.planner.plan.fusion.{OpFusionCodegenSpecBase, OpFusionContext}
 import org.apache.flink.table.planner.plan.fusion.FusionCodegenUtil.{constructDoConsumeCode, constructDoConsumeFunction, evaluateRequiredVariables, extractRefInputFields}
 import org.apache.flink.table.planner.plan.nodes.exec.spec.JoinSpec
-import org.apache.flink.table.planner.utils.JavaScalaConversionUtil.{toJava, toScala}
+import org.apache.flink.table.planner.utils.JavaScalaConversionUtil.toScala
 import org.apache.flink.table.runtime.hashtable.LongHybridHashTable
 import org.apache.flink.table.runtime.operators.join.{FlinkJoinType, HashJoinType}
 import org.apache.flink.table.runtime.typeutils.BinaryRowDataSerializer
@@ -175,15 +175,11 @@ class HashJoinFusionCodegenSpec(
          |$hashTableTerm.endBuild();
        """.stripMargin
     } else {
-      if (isBroadcast) {
-        fusionContext.endInputConsume()
-      } else {
-        s"""
-           |// Process the spilled partitions first
-           |$codegenEndInputCode
-           |${fusionContext.endInputConsume()}
-           |""".stripMargin
-      }
+      s"""
+         |// Process the spilled partitions first
+         |$codegenEndInputCode
+         |${fusionContext.endInputConsume()}
+         |""".stripMargin
     }
   }
 
@@ -525,19 +521,15 @@ class HashJoinFusionCodegenSpec(
   }
 
   private def codegenConsumeCode(resultVars: Seq[GeneratedExpression]): String = {
-    if (isBroadcast) {
-      fusionContext.processConsume(toJava(resultVars))
-    } else {
-      // Here need to cache to avoid generating the consume code multiple time
-      if (consumeFunctionName == null) {
-        consumeFunctionName = constructDoConsumeFunction(
-          variablePrefix,
-          opCodegenCtx,
-          fusionContext,
-          fusionContext.getOutputType)
-      }
-      constructDoConsumeCode(consumeFunctionName, resultVars)
+    // Here need to cache to avoid generating the consume code multiple time
+    if (consumeFunctionName == null) {
+      consumeFunctionName = constructDoConsumeFunction(
+        variablePrefix,
+        opCodegenCtx,
+        fusionContext,
+        fusionContext.getOutputType)
     }
+    constructDoConsumeCode(consumeFunctionName, resultVars)
   }
 
   private def codegenHashTable(spillEnabled: Boolean): Unit = {
