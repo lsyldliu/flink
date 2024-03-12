@@ -21,6 +21,7 @@ package org.apache.flink.table.catalog;
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.table.api.Schema;
 import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.catalog.dynamic.CatalogDynamicTable;
 import org.apache.flink.table.factories.DynamicTableFactory;
 
 import java.util.Map;
@@ -30,6 +31,7 @@ import java.util.Optional;
  * A common parent that describes the <i>unresolved</i> metadata of a table or view in a catalog.
  *
  * @see CatalogTable
+ * @see CatalogDynamicTable
  * @see CatalogView
  */
 @PublicEvolving
@@ -39,6 +41,7 @@ public interface CatalogBaseTable {
     @PublicEvolving
     enum TableKind {
         TABLE,
+        DYNAMIC_TABLE,
         VIEW
     }
 
