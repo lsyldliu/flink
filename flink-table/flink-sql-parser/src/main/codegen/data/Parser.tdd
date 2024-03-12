@@ -30,6 +30,17 @@
     "org.apache.flink.sql.parser.ddl.position.SqlTableColumnPosition"
     "org.apache.flink.sql.parser.ddl.resource.SqlResource"
     "org.apache.flink.sql.parser.ddl.resource.SqlResourceType"
+    "org.apache.flink.sql.parser.ddl.dynamic.SqlAlterDynamicTable"
+    "org.apache.flink.sql.parser.ddl.dynamic.SqlAlterDynamicTableFreshness"
+    "org.apache.flink.sql.parser.ddl.dynamic.SqlAlterDynamicTableOptions"
+    "org.apache.flink.sql.parser.ddl.dynamic.SqlAlterDynamicTableRefresh"
+    "org.apache.flink.sql.parser.ddl.dynamic.SqlAlterDynamicTableRefreshMode"
+    "org.apache.flink.sql.parser.ddl.dynamic.SqlAlterDynamicTableReset"
+    "org.apache.flink.sql.parser.ddl.dynamic.SqlAlterDynamicTableResume"
+    "org.apache.flink.sql.parser.ddl.dynamic.SqlAlterDynamicTableSuspend"
+    "org.apache.flink.sql.parser.ddl.dynamic.SqlCreateDynamicTable"
+    "org.apache.flink.sql.parser.ddl.dynamic.SqlDropDynamicTable"
+    "org.apache.flink.sql.parser.ddl.dynamic.SqlRefreshMode"
     "org.apache.flink.sql.parser.ddl.SqlAddJar"
     "org.apache.flink.sql.parser.ddl.SqlAddPartitions"
     "org.apache.flink.sql.parser.ddl.SqlAddPartitions.AlterTableAddPartitionContext"
@@ -94,6 +105,7 @@
     "org.apache.flink.sql.parser.dml.SqlStatementSet"
     "org.apache.flink.sql.parser.dql.SqlDescribeCatalog"
     "org.apache.flink.sql.parser.dql.SqlDescribeDatabase"
+    "org.apache.flink.sql.parser.dql.SqlDescribeJob"
     "org.apache.flink.sql.parser.dql.SqlRichExplain"
     "org.apache.flink.sql.parser.dql.SqlLoadModule"
     "org.apache.flink.sql.parser.dql.SqlShowCatalogs"
@@ -128,6 +140,7 @@
     "org.apache.calcite.sql.SqlAlienSystemTypeNameSpec"
     "org.apache.calcite.sql.SqlCreate"
     "org.apache.calcite.sql.SqlDrop"
+    "org.apache.calcite.sql.SqlIntervalLiteral"
     "java.util.ArrayList"
     "java.util.Collections"
     "java.util.HashSet"
@@ -152,6 +165,7 @@
     "ESTIMATED_COST"
     "EXTENDED"
     "FUNCTIONS"
+    "FRESHNESS"
     "IF"
     "JSON_EXECUTION_PLAN"
     "PLAN_ADVICE"
@@ -172,9 +186,12 @@
     "RAW"
     "REMOVE"
     "RENAME"
+    "REFRESH"
+    "RESUME"
     "SCALA"
     "STOP"
     "STRING"
+    "SUSPEND"
     "TABLES"
     "UNLOAD"
     "USE"
@@ -187,6 +204,8 @@
     "ANALYZE"
     "COMPUTE"
     "STATISTICS"
+    "REFRESH_MODE"
+    "CONTINUOUS"
   ]
 
   # List of keywords from "keywords" section that are not reserved.
@@ -548,6 +567,7 @@
   # Return type of method implementation should be 'SqlNode'.
   # Example: SqlShowDatabases(), SqlShowTables().
   statementParserMethods: [
+    "SqlDescribeJob()"
     "RichSqlInsert()"
     "SqlBeginStatementSet()"
     "SqlEndStatementSet()"
@@ -589,6 +609,9 @@
     "SqlStopJob()"
     "SqlShowJobs()"
     "SqlTruncateTable()"
+    "SqlCreateDynamicTable()"
+    "SqlAlterDynamicTable()"
+    "SqlDropDynamicTable()"
   ]
 
   # List of methods for parsing custom literals.

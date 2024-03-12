@@ -901,6 +901,172 @@ class FlinkSqlParserImplTest extends SqlParserTest {
     }
 
     @Test
+    void testCreateDynamicTable() {
+        final String sql =
+                "CREATE DYNAMIC TABLE tbl1\n"
+                        + "(\n"
+                        + "   PRIMARY KEY (a, b)\n"
+                        + ")\n"
+                        + "COMMENT 'table comment'\n"
+                        + "PARTITIONED BY (a, h)\n"
+                        + "WITH (\n"
+                        + "  'group.id' = 'latest', \n"
+                        + "  'kafka.topic' = 'log.test'\n"
+                        + ")\n"
+                        + "FRESHNESS = INTERVAL '3' MINUTE\n"
+                        + "AS SELECT a, b, h, t m FROM source";
+        final String expected =
+                "CREATE DYNAMIC TABLE `TBL1`\n"
+                        + "(\n"
+                        + "  PRIMARY KEY (`A`, `B`)\n"
+                        + ")\n"
+                        + "COMMENT 'table comment'\n"
+                        + "PARTITIONED BY (`A`, `H`)\n"
+                        + "WITH (\n"
+                        + "  'group.id' = 'latest',\n"
+                        + "  'kafka.topic' = 'log.test'\n"
+                        + ")\n"
+                        + "FRESHNESS = INTERVAL '3' MINUTE\n"
+                        + "AS\n"
+                        + "SELECT `A`, `B`, `H`, `T` AS `M`\n"
+                        + "FROM `SOURCE`";
+        sql(sql).ok(expected);
+    }
+
+    @Test
+    void testCreateDynamicTable2() {
+        final String sql =
+                "CREATE DYNAMIC TABLE tbl1\n"
+                        + "(\n"
+                        + "   PRIMARY KEY (a, b)\n"
+                        + ")\n"
+                        + "COMMENT 'table comment'\n"
+                        + "FRESHNESS = INTERVAL '3' MINUTE\n"
+                        + "REFRESH_MODE = FULL\n"
+                        + "AS SELECT a, b, h, t m FROM source";
+        final String expected =
+                "CREATE DYNAMIC TABLE `TBL1`\n"
+                        + "(\n"
+                        + "  PRIMARY KEY (`A`, `B`)\n"
+                        + ")\n"
+                        + "COMMENT 'table comment'\n"
+                        + "FRESHNESS = INTERVAL '3' MINUTE\n"
+                        + "REFRESH_MODE = FULL\n"
+                        + "AS\n"
+                        + "SELECT `A`, `B`, `H`, `T` AS `M`\n"
+                        + "FROM `SOURCE`";
+        sql(sql).ok(expected);
+    }
+
+    @Test
+    void testCreateDynamicTable3() {
+        final String sql =
+                "CREATE DYNAMIC TABLE tbl1\n"
+                        + "COMMENT 'table comment'\n"
+                        + "FRESHNESS = INTERVAL '3' YEAR\n"
+                        + "REFRESH_MODE = FULL\n"
+                        + "AS SELECT a, b, h, t m FROM source";
+        final String expected =
+                "CREATE DYNAMIC TABLE `TBL1`\n"
+                        + "COMMENT 'table comment'\n"
+                        + "FRESHNESS = INTERVAL '3' YEAR\n"
+                        + "REFRESH_MODE = FULL\n"
+                        + "AS\n"
+                        + "SELECT `A`, `B`, `H`, `T` AS `M`\n"
+                        + "FROM `SOURCE`";
+        sql(sql).ok(expected);
+    }
+
+    @Test
+    void testAlterDynamicTableSuspend() {
+        final String sql = "ALTER DYNAMIC TABLE tbl1 SUSPEND";
+        final String expected = "ALTER DYNAMIC TABLE `TBL1` SUSPEND";
+        sql(sql).ok(expected);
+    }
+
+    @Test
+    void testAlterDynamicTableResume() {
+        final String sql =
+                "ALTER DYNAMIC TABLE tbl1 RESUME\n"
+                        + "WITH (\n"
+                        + "  'group.id' = 'latest',\n"
+                        + "  'kafka.topic' = 'log.test'\n"
+                        + ")";
+        final String expected =
+                "ALTER DYNAMIC TABLE `TBL1` RESUME\n"
+                        + "WITH (\n"
+                        + "  'group.id' = 'latest',\n"
+                        + "  'kafka.topic' = 'log.test'\n"
+                        + ")";
+        sql(sql).ok(expected);
+    }
+
+    @Test
+    void testAlterDynamicTableSetFreshness() {
+        final String sql = "ALTER DYNAMIC TABLE tbl1 SET FRESHNESS = INTERVAL '10' SECOND";
+        final String expected = "ALTER DYNAMIC TABLE `TBL1` SET FRESHNESS = INTERVAL '10' SECOND";
+        sql(sql).ok(expected);
+    }
+
+    @Test
+    void testAlterDynamicTableSetRefreshMode() {
+        final String sql = "ALTER DYNAMIC TABLE tbl1 SET REFRESH_MODE = FULL";
+        final String expected = "ALTER DYNAMIC TABLE `TBL1` SET REFRESH_MODE = FULL";
+        sql(sql).ok(expected);
+    }
+
+    @Test
+    void testAlterDynamicTableSetOptions() {
+        final String sql =
+                "ALTER DYNAMIC TABLE tbl1 SET (\n"
+                        + "  'group.id' = 'latest',\n"
+                        + "  'kafka.topic' = 'log.test'\n"
+                        + ")";
+        final String expected =
+                "ALTER DYNAMIC TABLE `TBL1` SET (\n"
+                        + "  'group.id' = 'latest',\n"
+                        + "  'kafka.topic' = 'log.test'\n"
+                        + ")";
+        sql(sql).ok(expected);
+    }
+
+    @Test
+    void testAlterDynamicTableReset() {
+        final String sql =
+                "ALTER DYNAMIC TABLE tbl1 RESET (\n"
+                        + "  'group.id',\n"
+                        + "  'kafka.topic'\n"
+                        + ")";
+        final String expected =
+                "ALTER DYNAMIC TABLE `TBL1` RESET (\n"
+                        + "  'group.id',\n"
+                        + "  'kafka.topic'\n"
+                        + ")";
+        sql(sql).ok(expected);
+    }
+
+    @Test
+    void testAlterDynamicTableRefresh() {
+        final String sql = "ALTER DYNAMIC TABLE tbl1 REFRESH";
+        final String expected = "ALTER DYNAMIC TABLE `TBL1` REFRESH";
+        sql(sql).ok(expected);
+
+        sql("ALTER DYNAMIC TABLE tbl1 REFRESH PARTITION (dt = '2021')")
+                .ok("ALTER DYNAMIC TABLE `TBL1` REFRESH PARTITION (`DT` = '2021')");
+    }
+
+    @Test
+    void testDropDynamicTable() {
+        sql("DROP DYNAMIC TABLE IF EXISTS tbl1").ok("DROP DYNAMIC TABLE IF EXISTS `TBL1`");
+    }
+
+    @Test
+    void testDescribeJobs() {
+        sql("DESC JOB 'myjob'").ok("DESCRIBE JOB 'myjob'");
+        sql("DESCRIBE JOB 'myjob'").ok("DESCRIBE JOB 'myjob'");
+    }
+
+    @Test
     void testCreateTableIfNotExists() {
         final String sql =
                 "CREATE TABLE IF NOT EXISTS tbl1 (\n"

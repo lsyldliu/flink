@@ -2739,6 +2739,22 @@ SqlStopJob SqlStopJob() :
 }
 
 /**
+* Parses a DESCRIBE JOB statement
+*/
+SqlDescribeJob SqlDescribeJob() :
+{
+    SqlCharStringLiteral jobId;
+}
+{
+    ( <DESCRIBE> | <DESC> ) <JOB> <QUOTED_STRING>
+    {
+        String id = SqlParserUtil.parseString(token.image);
+        jobId = SqlLiteral.createCharString(id, getPos());
+        return new SqlDescribeJob(getPos(), jobId);
+    }
+}
+
+/**
  * Parses a TRUNCATE TABLE statement.
  */
 SqlTruncateTable SqlTruncateTable() :
@@ -2750,5 +2766,165 @@ SqlTruncateTable SqlTruncateTable() :
     sqlIdentifier = CompoundIdentifier()
     {
         return new SqlTruncateTable(getPos(), sqlIdentifier);
+    }
+}
+
+/**
+  * Parses a CREATE DYNAMIC TABLE statement.
+  */
+SqlCreateDynamicTable SqlCreateDynamicTable() :
+{
+    final Span s;
+    SqlIdentifier tableName;
+    SqlCharStringLiteral comment = null;
+    SqlTableConstraint constraint = null;
+    SqlNodeList partitionColumns = SqlNodeList.EMPTY;
+    SqlNodeList propertyList = SqlNodeList.EMPTY;
+    SqlNode freshness = null;
+    SqlLiteral refreshMode = null;
+    SqlNode asQuery = null;
+}
+{
+    <CREATE> <DYNAMIC> <TABLE> { s = span(); }
+    tableName = CompoundIdentifier()
+    [ <LPAREN> constraint = TableConstraint() <RPAREN> ]
+    [ <COMMENT> <QUOTED_STRING> {
+        String p = SqlParserUtil.parseString(token.image);
+        comment = SqlLiteral.createCharString(p, getPos()); }
+    ]
+    [ <PARTITIONED> <BY> partitionColumns = ParenthesizedSimpleIdentifierList() ]
+    [ <WITH> propertyList = TableProperties() ]
+    <FRESHNESS> <EQ> freshness = Expression(ExprContext.ACCEPT_NON_QUERY) {
+        if (!(freshness instanceof SqlIntervalLiteral)) {
+            throw SqlUtil.newContextException(
+            getPos(),
+            ParserResource.RESOURCE.freshnessUnsupportedType());
+        }
+    }
+    [ <REFRESH_MODE> <EQ>
+        (
+            <FULL> { refreshMode = SqlRefreshMode.FULL.symbol(getPos()); }
+        |
+            <CONTINUOUS> { refreshMode = SqlRefreshMode.CONTINUOUS.symbol(getPos()); }
+        )
+    ]
+    <AS> asQuery = OrderedQueryOrExpr(ExprContext.ACCEPT_QUERY)
+    {
+        return new SqlCreateDynamicTable(
+                    s.end(this),
+                    tableName,
+                    comment,
+                    constraint,
+                    partitionColumns,
+                    propertyList,
+                    (SqlIntervalLiteral) freshness,
+                    refreshMode,
+                    asQuery);
+    }
+}
+
+SqlAlterDynamicTable SqlAlterDynamicTable() :
+{
+    SqlParserPos startPos;
+    SqlIdentifier tableIdentifier;
+    SqlNodeList propertyList = SqlNodeList.EMPTY;
+    SqlNodeList propertyKeyList = SqlNodeList.EMPTY;
+    SqlNodeList partSpec = null;
+    SqlNode freshness = null;
+}
+{
+    <ALTER> <DYNAMIC> <TABLE> { startPos = getPos(); }
+    tableIdentifier = CompoundIdentifier()
+    (
+        <SUSPEND> {
+            return new SqlAlterDynamicTableSuspend(
+                startPos.plus(getPos()),
+                tableIdentifier);
+            }
+        |
+        <RESUME>
+        [ <WITH> propertyList = TableProperties() ]
+            {
+                return new SqlAlterDynamicTableResume(
+                    startPos.plus(getPos()),
+                    tableIdentifier,
+                    propertyList);
+            }
+        |
+        <SET>
+        (
+            <FRESHNESS> <EQ> freshness = Expression(ExprContext.ACCEPT_NON_QUERY) {
+                if (!(freshness instanceof SqlIntervalLiteral)) {
+                    throw SqlUtil.newContextException(
+                    getPos(),
+                    ParserResource.RESOURCE.freshnessUnsupportedType());
+                }
+                return new SqlAlterDynamicTableFreshness(
+                    startPos.plus(getPos()),
+                    tableIdentifier,
+                    (SqlIntervalLiteral) freshness);
+            }
+            |
+            <REFRESH_MODE> <EQ>
+            (
+                <FULL> {
+                    return new SqlAlterDynamicTableRefreshMode(
+                        startPos.plus(getPos()),
+                        tableIdentifier,
+                        SqlRefreshMode.FULL.symbol(getPos()));
+                }
+                |
+                <CONTINUOUS> {
+                    return new SqlAlterDynamicTableRefreshMode(
+                        startPos.plus(getPos()),
+                        tableIdentifier,
+                        SqlRefreshMode.CONTINUOUS.symbol(getPos()));
+                }
+            )
+            |
+            propertyList = TableProperties()
+            {
+                return new SqlAlterDynamicTableOptions(
+                        startPos.plus(getPos()),
+                        tableIdentifier,
+                        propertyList);
+            }
+        )
+        |
+        <RESET>
+            propertyKeyList = TablePropertyKeys()
+            {
+                return new SqlAlterDynamicTableReset(
+                        startPos.plus(getPos()),
+                        tableIdentifier,
+                        propertyKeyList);
+            }
+        |
+        <REFRESH>
+        [ <PARTITION> {
+                partSpec = new SqlNodeList(getPos());
+                PartitionSpecCommaList(partSpec);
+            }
+        ]
+            {
+                return new SqlAlterDynamicTableRefresh(
+                        startPos.plus(getPos()),
+                        tableIdentifier,
+                        partSpec);
+            }
+    )
+}
+
+SqlDropDynamicTable SqlDropDynamicTable() :
+{
+    final Span s;
+    SqlIdentifier tableName = null;
+    boolean ifExists = false;
+}
+{
+    <DROP> <DYNAMIC> <TABLE> { s = span(); }
+    ifExists = IfExistsOpt()
+    tableName = CompoundIdentifier() {
+        return new SqlDropDynamicTable(s.end(this), tableName, ifExists);
     }
 }

@@ -46,4 +46,8 @@ public interface ParserResource {
 
     @Resources.BaseMessage("WITH DRAIN could only be used after WITH SAVEPOINT.")
     Resources.ExInst<ParseException> withDrainOnlyUsedWithSavepoint();
+
+    @Resources.BaseMessage(
+            "Dynamic table FRESHNESS only support Interval Type, please refer to the dynamic table document.")
+    Resources.ExInst<ParseException> freshnessUnsupportedType();
 }
