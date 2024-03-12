@@ -20,6 +20,7 @@ package org.apache.flink.table.catalog;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.table.api.ValidationException;
+import org.apache.flink.table.catalog.dynamic.ResolvedCatalogDynamicTable;
 import org.apache.flink.table.factories.FactoryUtil;
 import org.apache.flink.util.Preconditions;
 
@@ -145,10 +146,35 @@ public final class ContextResolvedTable {
     /**
      * Copy the {@link ContextResolvedTable}, replacing the underlying {@link CatalogTable} options.
      */
+    public ContextResolvedTable copy() {
+        if (resolvedTable.getTableKind() == CatalogBaseTable.TableKind.DYNAMIC_TABLE) {
+            return new ContextResolvedTable(
+                    objectIdentifier,
+                    catalog,
+                    ((ResolvedCatalogDynamicTable) resolvedTable).toResolvedCatalogTable(),
+                    false);
+        }
+        return new ContextResolvedTable(
+                objectIdentifier,
+                catalog,
+                ((ResolvedCatalogTable) resolvedTable).copy(resolvedTable.getOptions()),
+                false);
+    }
+
+    /**
+     * Copy the {@link ContextResolvedTable}, replacing the underlying {@link CatalogTable} options.
+     */
     public ContextResolvedTable copy(Map<String, String> newOptions) {
         if (resolvedTable.getTableKind() == CatalogBaseTable.TableKind.VIEW) {
             throw new ValidationException(
                     String.format("View '%s' cannot be enriched with new options.", this));
+        }
+        if (resolvedTable.getTableKind() == CatalogBaseTable.TableKind.DYNAMIC_TABLE) {
+            return new ContextResolvedTable(
+                    objectIdentifier,
+                    catalog,
+                    ((ResolvedCatalogDynamicTable) resolvedTable).copy(newOptions),
+                    false);
         }
         return new ContextResolvedTable(
                 objectIdentifier,
@@ -159,6 +185,12 @@ public final class ContextResolvedTable {
 
     /** Copy the {@link ContextResolvedTable}, replacing the underlying {@link ResolvedSchema}. */
     public ContextResolvedTable copy(ResolvedSchema newSchema) {
+        if (resolvedTable.getTableKind() == CatalogBaseTable.TableKind.DYNAMIC_TABLE) {
+            throw new ValidationException(
+                    String.format(
+                            "Dynamic Table '%s' cannot be copied with new schema %s.",
+                            this, newSchema));
+        }
         return new ContextResolvedTable(
                 objectIdentifier,
                 catalog,

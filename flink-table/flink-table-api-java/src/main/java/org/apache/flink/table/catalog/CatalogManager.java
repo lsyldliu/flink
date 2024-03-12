@@ -28,6 +28,8 @@ import org.apache.flink.table.api.Schema;
 import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.api.internal.TableEnvironmentImpl;
+import org.apache.flink.table.catalog.dynamic.CatalogDynamicTable;
+import org.apache.flink.table.catalog.dynamic.ResolvedCatalogDynamicTable;
 import org.apache.flink.table.catalog.exceptions.CatalogException;
 import org.apache.flink.table.catalog.exceptions.DatabaseAlreadyExistException;
 import org.apache.flink.table.catalog.exceptions.DatabaseNotEmptyException;
@@ -959,7 +961,8 @@ public final class CatalogManager implements CatalogRegistry, AutoCloseable {
                                     ignoreIfExists);
 
                     catalog.createTable(path, resolvedListenedTable, ignoreIfExists);
-                    if (resolvedListenedTable instanceof CatalogTable) {
+                    if (resolvedListenedTable instanceof CatalogTable
+                            || resolvedListenedTable instanceof CatalogDynamicTable) {
                         catalogModificationListeners.forEach(
                                 listener ->
                                         listener.onEvent(
@@ -1146,7 +1149,8 @@ public final class CatalogManager implements CatalogRegistry, AutoCloseable {
                 (catalog, path) -> {
                     final CatalogBaseTable resolvedTable = resolveCatalogBaseTable(table);
                     catalog.alterTable(path, resolvedTable, ignoreIfNotExists);
-                    if (resolvedTable instanceof CatalogTable) {
+                    if (resolvedTable instanceof CatalogTable
+                            || resolvedTable instanceof CatalogDynamicTable) {
                         catalogModificationListeners.forEach(
                                 listener ->
                                         listener.onEvent(
@@ -1316,6 +1320,8 @@ public final class CatalogManager implements CatalogRegistry, AutoCloseable {
             return resolveCatalogTable((CatalogTable) baseTable);
         } else if (baseTable instanceof CatalogView) {
             return resolveCatalogView((CatalogView) baseTable);
+        } else if (baseTable instanceof CatalogDynamicTable) {
+            return resolveCatalogDynamicTable((CatalogDynamicTable) baseTable);
         }
         throw new IllegalArgumentException(
                 "Unknown kind of catalog base table: " + baseTable.getClass());
@@ -1350,6 +1356,40 @@ public final class CatalogManager implements CatalogRegistry, AutoCloseable {
                         });
 
         return new ResolvedCatalogTable(table, resolvedSchema);
+    }
+
+    /**
+     * Resolves a {@link CatalogDynamicTable} to a validated {@link ResolvedCatalogDynamicTable}.
+     */
+    public ResolvedCatalogDynamicTable resolveCatalogDynamicTable(CatalogDynamicTable table) {
+        Preconditions.checkNotNull(schemaResolver, "Schema resolver is not initialized.");
+
+        if (table instanceof ResolvedCatalogDynamicTable) {
+            return (ResolvedCatalogDynamicTable) table;
+        }
+
+        final ResolvedSchema resolvedSchema = table.getUnresolvedSchema().resolve(schemaResolver);
+
+        // Validate partition keys are included in physical columns
+        final List<String> physicalColumns =
+                resolvedSchema.getColumns().stream()
+                        .filter(Column::isPhysical)
+                        .map(Column::getName)
+                        .collect(Collectors.toList());
+        table.getPartitionKeys()
+                .forEach(
+                        partitionKey -> {
+                            if (!physicalColumns.contains(partitionKey)) {
+                                throw new ValidationException(
+                                        String.format(
+                                                "Invalid partition key '%s'. A partition key must "
+                                                        + "reference a physical column in the schema. "
+                                                        + "Available columns are: %s",
+                                                partitionKey, physicalColumns));
+                            }
+                        });
+
+        return new ResolvedCatalogDynamicTable(table, resolvedSchema);
     }
 
     /** Resolves a {@link CatalogView} to a validated {@link ResolvedCatalogView}. */

@@ -735,6 +735,11 @@ public class SqlNodeToOperationConversion {
         UnresolvedIdentifier unresolvedIdentifier = UnresolvedIdentifier.of(targetTablePath);
         ObjectIdentifier identifier = catalogManager.qualifyIdentifier(unresolvedIdentifier);
         ContextResolvedTable contextResolvedTable = catalogManager.getTableOrError(identifier);
+        // convert it in entrance
+        if (contextResolvedTable.getResolvedTable().getTableKind()
+                == CatalogBaseTable.TableKind.DYNAMIC_TABLE) {
+            contextResolvedTable = contextResolvedTable.copy();
+        }
 
         PlannerQueryOperation query =
                 (PlannerQueryOperation)

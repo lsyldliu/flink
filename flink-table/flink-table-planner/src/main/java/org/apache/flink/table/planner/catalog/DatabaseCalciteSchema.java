@@ -87,7 +87,8 @@ class DatabaseCalciteSchema extends FlinkSchema {
         } else {
             table = catalogManager.getTable(identifier);
         }
-        return table.map(
+        return table.map(resolvedTable -> resolvedTable.copy())
+                .map(
                         lookupResult ->
                                 new CatalogSchemaTable(
                                         lookupResult,
