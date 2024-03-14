@@ -77,7 +77,7 @@ public interface CatalogDynamicTable extends CatalogBaseTable {
             @Nullable Long snapshot,
             String definitionQuery,
             Duration freshness,
-            RefreshMode refreshMode,
+            @Nullable RefreshMode refreshMode,
             RefreshHandler refreshJobHandler) {
         return new DefaultCatalogDynamicTable(
                 schema,
@@ -141,7 +141,7 @@ public interface CatalogDynamicTable extends CatalogBaseTable {
     Duration getFreshness();
 
     /** Get the refresh mode of dynamic table. */
-    RefreshMode getRefreshMode();
+    Optional<RefreshMode> getRefreshMode();
 
     /** Get the refresh job handler of dynamic table. */
     RefreshHandler getRefreshJobHandler();

@@ -116,7 +116,7 @@ public class ResolvedCatalogDynamicTable
     }
 
     @Override
-    public RefreshMode getRefreshMode() {
+    public Optional<RefreshMode> getRefreshMode() {
         return origin.getRefreshMode();
     }
 

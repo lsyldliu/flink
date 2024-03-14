@@ -33,7 +33,7 @@ import java.util.Map;
 
 /** Operation to describe a CREATE DYNAMIC TABLE statement. */
 @Internal
-public class CreateDynamicTableOperation implements CreateOperation {
+public class CreateDynamicTableOperation implements CreateOperation, DynamicTableOperation {
 
     private final ObjectIdentifier tableIdentifier;
     private final CatalogDynamicTable dynamicTable;
@@ -49,6 +49,14 @@ public class CreateDynamicTableOperation implements CreateOperation {
         // create dynamic table
         ctx.getCatalogManager().createTable(dynamicTable, tableIdentifier, false);
         return TableResultImpl.TABLE_RESULT_OK;
+    }
+
+    public ObjectIdentifier getTableIdentifier() {
+        return tableIdentifier;
+    }
+
+    public CatalogDynamicTable getDynamicTable() {
+        return dynamicTable;
     }
 
     @Override

@@ -47,7 +47,7 @@ public class DefaultCatalogDynamicTable implements CatalogDynamicTable {
 
     private final String definitionQuery;
     private final Duration freshness;
-    private final RefreshMode refreshMode;
+    private final @Nullable RefreshMode refreshMode;
     private final RefreshHandler refreshJobHandler;
 
     protected DefaultCatalogDynamicTable(
@@ -58,7 +58,7 @@ public class DefaultCatalogDynamicTable implements CatalogDynamicTable {
             @Nullable Long snapshot,
             String definitionQuery,
             Duration freshness,
-            RefreshMode refreshMode,
+            @Nullable RefreshMode refreshMode,
             RefreshHandler refreshJobHandler) {
         this.schema = checkNotNull(schema, "Schema must not be null.");
         this.comment = comment;
@@ -174,6 +174,15 @@ public class DefaultCatalogDynamicTable implements CatalogDynamicTable {
                 + options
                 + ", snapshot="
                 + snapshot
+                + ", definitionQuery='"
+                + definitionQuery
+                + '\''
+                + ", freshness="
+                + freshness
+                + ", refreshMode="
+                + refreshMode
+                + ", refreshJobHandler="
+                + refreshJobHandler
                 + '}';
     }
 
@@ -193,8 +202,8 @@ public class DefaultCatalogDynamicTable implements CatalogDynamicTable {
     }
 
     @Override
-    public RefreshMode getRefreshMode() {
-        return refreshMode;
+    public Optional<RefreshMode> getRefreshMode() {
+        return Optional.ofNullable(refreshMode);
     }
 
     @Override

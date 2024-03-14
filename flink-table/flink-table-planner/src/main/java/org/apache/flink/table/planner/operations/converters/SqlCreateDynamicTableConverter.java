@@ -21,6 +21,7 @@ package org.apache.flink.table.planner.operations.converters;
 import org.apache.flink.sql.parser.ddl.SqlTableOption;
 import org.apache.flink.sql.parser.ddl.constraint.SqlTableConstraint;
 import org.apache.flink.sql.parser.ddl.dynamic.SqlCreateDynamicTable;
+import org.apache.flink.sql.parser.ddl.dynamic.SqlRefreshMode;
 import org.apache.flink.table.api.Schema;
 import org.apache.flink.table.catalog.CatalogManager;
 import org.apache.flink.table.catalog.ObjectIdentifier;
@@ -30,12 +31,14 @@ import org.apache.flink.table.catalog.dynamic.RefreshHandler;
 import org.apache.flink.table.operations.Operation;
 import org.apache.flink.table.operations.QueryOperation;
 import org.apache.flink.table.operations.ddl.dynamic.CreateDynamicTableOperation;
+import org.apache.flink.table.planner.operations.DynamicTableUtil;
 import org.apache.flink.table.planner.operations.PlannerQueryOperation;
 import org.apache.flink.table.planner.utils.OperationConverterUtils;
 
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -76,6 +79,16 @@ public class SqlCreateDynamicTableConverter implements SqlNodeConverter<SqlCreat
                                         ((SqlTableOption) p).getValueString()));
 
         // get freshness
+        Duration freshness =
+                DynamicTableUtil.getDynamicTableFreshness(sqlCreateDynamicTable.getFreshness());
+
+        // get refresh mode
+        CatalogDynamicTable.RefreshMode refreshMode = null;
+        if (sqlCreateDynamicTable.getRefreshMode().isPresent()) {
+            SqlRefreshMode sqlRefreshMode =
+                    sqlCreateDynamicTable.getRefreshMode().get().getValueAs(SqlRefreshMode.class);
+            refreshMode = DynamicTableUtil.getRefreshMode(sqlRefreshMode);
+        }
 
         // get query schema
         SqlNode validateQuery =
@@ -116,11 +129,11 @@ public class SqlCreateDynamicTableConverter implements SqlNodeConverter<SqlCreat
                         properties,
                         null,
                         expandedQuery,
-                        null,
-                        null,
+                        freshness,
+                        refreshMode,
                         new RefreshHandler(
                                 CatalogDynamicTable.RefreshMode.CONTINUOUS,
-                                RefreshHandler.JobState.INITIALIZING,
+                                RefreshHandler.State.INITIALIZING,
                                 null));
 
         return new CreateDynamicTableOperation(identifier, dynamicTable);

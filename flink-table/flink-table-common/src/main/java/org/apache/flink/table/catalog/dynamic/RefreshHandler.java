@@ -39,28 +39,28 @@ import java.util.Objects;
 public class RefreshHandler {
 
     private final CatalogDynamicTable.RefreshMode actualRefreshMode;
-    private final JobState jobState;
-    private final @Nullable String jobDetail;
+    private final State state;
+    private final @Nullable String detail;
 
     public RefreshHandler(
             CatalogDynamicTable.RefreshMode actualRefreshMode,
-            JobState jobState,
-            @Nullable String jobDetail) {
+            State state,
+            @Nullable String detail) {
         this.actualRefreshMode = actualRefreshMode;
-        this.jobState = jobState;
-        this.jobDetail = jobDetail;
+        this.state = state;
+        this.detail = detail;
     }
 
     public CatalogDynamicTable.RefreshMode getActualRefreshMode() {
         return actualRefreshMode;
     }
 
-    public JobState getJobState() {
-        return jobState;
+    public State getState() {
+        return state;
     }
 
-    public String getJobDetail() {
-        return jobDetail;
+    public String getDetail() {
+        return detail;
     }
 
     @Override
@@ -73,31 +73,31 @@ public class RefreshHandler {
         }
         RefreshHandler that = (RefreshHandler) o;
         return actualRefreshMode == that.actualRefreshMode
-                && jobState == that.jobState
-                && Objects.equals(jobDetail, that.jobDetail);
+                && state == that.state
+                && Objects.equals(detail, that.detail);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(actualRefreshMode, jobState, jobDetail);
+        return Objects.hash(actualRefreshMode, state, detail);
     }
 
     @Override
     public String toString() {
-        return "RefreshJobHandler{"
+        return "RefreshHandler{"
                 + "actualRefreshMode="
                 + actualRefreshMode
-                + ", jobState="
-                + jobState
-                + ", jobDetail='"
-                + jobDetail
+                + ", state="
+                + state
+                + ", detail='"
+                + detail
                 + '\''
                 + '}';
     }
 
     /** Background refresh job state. */
     @PublicEvolving
-    public enum JobState {
+    public enum State {
         INITIALIZING,
         ACTIVATED,
         SUSPENDED
