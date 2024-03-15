@@ -144,21 +144,17 @@ public final class ContextResolvedTable {
     }
 
     /**
-     * Copy the {@link ContextResolvedTable}, replacing the underlying {@link CatalogTable} options.
+     * Convert the {@link ResolvedCatalogDynamicTable} in {@link ContextResolvedTable} to {@link
+     * ResolvedCatalogTable }.
      */
-    public ContextResolvedTable copy() {
+    public ContextResolvedTable convertDynamicTable() {
         if (resolvedTable.getTableKind() == CatalogBaseTable.TableKind.DYNAMIC_TABLE) {
-            return new ContextResolvedTable(
+            return ContextResolvedTable.permanent(
                     objectIdentifier,
                     catalog,
-                    ((ResolvedCatalogDynamicTable) resolvedTable).toResolvedCatalogTable(),
-                    false);
+                    ((ResolvedCatalogDynamicTable) resolvedTable).toResolvedCatalogTable());
         }
-        return new ContextResolvedTable(
-                objectIdentifier,
-                catalog,
-                ((ResolvedCatalogTable) resolvedTable).copy(resolvedTable.getOptions()),
-                false);
+        return this;
     }
 
     /**
@@ -170,11 +166,10 @@ public final class ContextResolvedTable {
                     String.format("View '%s' cannot be enriched with new options.", this));
         }
         if (resolvedTable.getTableKind() == CatalogBaseTable.TableKind.DYNAMIC_TABLE) {
-            return new ContextResolvedTable(
+            return ContextResolvedTable.permanent(
                     objectIdentifier,
                     catalog,
-                    ((ResolvedCatalogDynamicTable) resolvedTable).copy(newOptions),
-                    false);
+                    ((ResolvedCatalogDynamicTable) resolvedTable).copy(newOptions));
         }
         return new ContextResolvedTable(
                 objectIdentifier,

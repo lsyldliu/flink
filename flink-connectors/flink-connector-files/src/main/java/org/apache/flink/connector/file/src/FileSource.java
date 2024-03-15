@@ -131,6 +131,7 @@ public final class FileSource<T> extends AbstractFileSource<T, FileSourceSplit>
             final FileEnumerator.Provider fileEnumerator,
             final FileSplitAssigner.Provider splitAssigner,
             final BulkFormat<T, FileSourceSplit> readerFormat,
+            final boolean isStreamingMode,
             @Nullable final ContinuousEnumerationSettings continuousEnumerationSettings) {
 
         super(
@@ -138,6 +139,7 @@ public final class FileSource<T> extends AbstractFileSource<T, FileSourceSplit>
                 fileEnumerator,
                 splitAssigner,
                 readerFormat,
+                isStreamingMode,
                 continuousEnumerationSettings);
     }
 
@@ -249,6 +251,7 @@ public final class FileSource<T> extends AbstractFileSource<T, FileSourceSplit>
                     fileEnumerator,
                     splitAssigner,
                     readerFormat,
+                    isStreamingMode,
                     continuousSourceSettings);
         }
     }

@@ -77,6 +77,7 @@ public abstract class AbstractFileSource<T, SplitT extends FileSourceSplit>
 
     private final BulkFormat<T, SplitT> readerFormat;
 
+    private final boolean isStreamingMode;
     @Nullable private final ContinuousEnumerationSettings continuousEnumerationSettings;
 
     // ------------------------------------------------------------------------
@@ -87,12 +88,29 @@ public abstract class AbstractFileSource<T, SplitT extends FileSourceSplit>
             final FileSplitAssigner.Provider splitAssigner,
             final BulkFormat<T, SplitT> readerFormat,
             @Nullable final ContinuousEnumerationSettings continuousEnumerationSettings) {
+        this(
+                inputPaths,
+                fileEnumerator,
+                splitAssigner,
+                readerFormat,
+                false,
+                continuousEnumerationSettings);
+    }
+
+    protected AbstractFileSource(
+            final Path[] inputPaths,
+            final FileEnumerator.Provider fileEnumerator,
+            final FileSplitAssigner.Provider splitAssigner,
+            final BulkFormat<T, SplitT> readerFormat,
+            final boolean isStreamingMode,
+            @Nullable final ContinuousEnumerationSettings continuousEnumerationSettings) {
 
         checkArgument(inputPaths.length > 0);
         this.inputPaths = inputPaths;
         this.enumeratorFactory = checkNotNull(fileEnumerator);
         this.assignerFactory = checkNotNull(splitAssigner);
         this.readerFormat = checkNotNull(readerFormat);
+        this.isStreamingMode = isStreamingMode;
         this.continuousEnumerationSettings = continuousEnumerationSettings;
     }
 
@@ -119,9 +137,9 @@ public abstract class AbstractFileSource<T, SplitT extends FileSourceSplit>
 
     @Override
     public Boundedness getBoundedness() {
-        return continuousEnumerationSettings == null
-                ? Boundedness.BOUNDED
-                : Boundedness.CONTINUOUS_UNBOUNDED;
+        return isStreamingMode && continuousEnumerationSettings != null
+                ? Boundedness.CONTINUOUS_UNBOUNDED
+                : Boundedness.BOUNDED;
     }
 
     @Override
@@ -199,10 +217,7 @@ public abstract class AbstractFileSource<T, SplitT extends FileSourceSplit>
 
         final FileSplitAssigner splitAssigner = assignerFactory.create(splits);
 
-        if (continuousEnumerationSettings == null) {
-            // bounded case
-            return castGeneric(new StaticFileSplitEnumerator(fileSplitContext, splitAssigner));
-        } else {
+        if (isStreamingMode && continuousEnumerationSettings != null) {
             // unbounded case
             if (alreadyProcessedPaths == null) {
                 alreadyProcessedPaths = splitsToPaths(splits);
@@ -216,6 +231,9 @@ public abstract class AbstractFileSource<T, SplitT extends FileSourceSplit>
                             inputPaths,
                             alreadyProcessedPaths,
                             continuousEnumerationSettings.getDiscoveryInterval().toMillis()));
+        } else {
+            // bounded case
+            return castGeneric(new StaticFileSplitEnumerator(fileSplitContext, splitAssigner));
         }
     }
 
@@ -268,6 +286,7 @@ public abstract class AbstractFileSource<T, SplitT extends FileSourceSplit>
         protected FileEnumerator.Provider fileEnumerator;
         protected FileSplitAssigner.Provider splitAssigner;
         @Nullable protected ContinuousEnumerationSettings continuousSourceSettings;
+        protected boolean isStreamingMode = false;
 
         protected AbstractFileSourceBuilder(
                 final Path[] inputPaths,
@@ -303,6 +322,11 @@ public abstract class AbstractFileSource<T, SplitT extends FileSourceSplit>
                     "discoveryInterval must be > 0");
 
             this.continuousSourceSettings = new ContinuousEnumerationSettings(discoveryInterval);
+            return self();
+        }
+
+        public SELF isStreamingMode(boolean isStreamingMode) {
+            this.isStreamingMode = isStreamingMode;
             return self();
         }
 

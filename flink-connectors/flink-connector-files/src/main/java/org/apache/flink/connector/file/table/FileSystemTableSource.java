@@ -96,6 +96,8 @@ public class FileSystemTableSource extends AbstractFileSystemTable
     @Nullable private final DecodingFormat<BulkFormat<RowData, FileSourceSplit>> bulkReaderFormat;
     @Nullable private final DecodingFormat<DeserializationSchema<RowData>> deserializationFormat;
 
+    private final boolean isStreamingMode;
+
     // These mutable fields
     private List<Map<String, String>> remainingPartitions;
     private List<ResolvedExpression> filters;
@@ -110,7 +112,8 @@ public class FileSystemTableSource extends AbstractFileSystemTable
             List<String> partitionKeys,
             ReadableConfig tableOptions,
             @Nullable DecodingFormat<BulkFormat<RowData, FileSourceSplit>> bulkReaderFormat,
-            @Nullable DecodingFormat<DeserializationSchema<RowData>> deserializationFormat) {
+            @Nullable DecodingFormat<DeserializationSchema<RowData>> deserializationFormat,
+            boolean isStreamingMode) {
         super(tableIdentifier, physicalRowDataType, partitionKeys, tableOptions);
         if (Stream.of(bulkReaderFormat, deserializationFormat).allMatch(Objects::isNull)) {
             String identifier = tableOptions.get(FactoryUtil.FORMAT);
@@ -122,6 +125,7 @@ public class FileSystemTableSource extends AbstractFileSystemTable
         this.bulkReaderFormat = bulkReaderFormat;
         this.deserializationFormat = deserializationFormat;
         this.producedDataType = physicalRowDataType;
+        this.isStreamingMode = isStreamingMode;
     }
 
     @Override
@@ -284,6 +288,8 @@ public class FileSystemTableSource extends AbstractFileSystemTable
                                                         new NonSplittingRecursiveAllDirEnumerator(
                                                                 regex)));
 
+        fileSourceBuilder.isStreamingMode(isStreamingMode);
+
         return SourceProvider.of(fileSourceBuilder.build());
     }
 
@@ -416,7 +422,8 @@ public class FileSystemTableSource extends AbstractFileSystemTable
                         partitionKeys,
                         tableOptions,
                         bulkReaderFormat,
-                        deserializationFormat);
+                        deserializationFormat,
+                        isStreamingMode);
         source.partitionKeys = partitionKeys;
         source.remainingPartitions = remainingPartitions;
         source.filters = filters;

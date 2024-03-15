@@ -19,8 +19,10 @@
 package org.apache.flink.connector.file.table;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.api.common.RuntimeExecutionMode;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.ExecutionOptions;
 import org.apache.flink.connector.file.table.factories.BulkReaderFormatFactory;
 import org.apache.flink.connector.file.table.factories.BulkWriterFormatFactory;
 import org.apache.flink.table.api.TableConfig;
@@ -69,13 +71,17 @@ public class FileSystemTableFactory implements DynamicTableSourceFactory, Dynami
     public DynamicTableSource createDynamicTableSource(Context context) {
         FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
         validate(helper);
+        boolean isStreamingMode =
+                context.getConfiguration().get(ExecutionOptions.RUNTIME_MODE)
+                        == RuntimeExecutionMode.STREAMING;
         return new FileSystemTableSource(
                 context.getObjectIdentifier(),
                 context.getPhysicalRowDataType(),
                 context.getCatalogTable().getPartitionKeys(),
                 helper.getOptions(),
                 discoverDecodingFormat(context, BulkReaderFormatFactory.class),
-                discoverDecodingFormat(context, DeserializationFormatFactory.class));
+                discoverDecodingFormat(context, DeserializationFormatFactory.class),
+                isStreamingMode);
     }
 
     @Override
