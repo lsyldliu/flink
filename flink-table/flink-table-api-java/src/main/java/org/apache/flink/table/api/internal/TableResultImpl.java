@@ -56,6 +56,7 @@ public class TableResultImpl implements TableResultInternal {
     private final PrintStyle printStyle;
 
     private final CachedPlan cachedPlan;
+    private final String clusterId;
 
     private TableResultImpl(
             @Nullable JobClient jobClient,
@@ -63,7 +64,8 @@ public class TableResultImpl implements TableResultInternal {
             ResultKind resultKind,
             ResultProvider resultProvider,
             PrintStyle printStyle,
-            CachedPlan cachedPlan) {
+            CachedPlan cachedPlan,
+            @Nullable String clusterId) {
         this.jobClient = jobClient;
         this.resolvedSchema =
                 Preconditions.checkNotNull(resolvedSchema, "resolvedSchema should not be null");
@@ -72,6 +74,7 @@ public class TableResultImpl implements TableResultInternal {
         this.resultProvider = resultProvider;
         this.printStyle = Preconditions.checkNotNull(printStyle, "printStyle should not be null");
         this.cachedPlan = cachedPlan;
+        this.clusterId = clusterId;
     }
 
     @Override
@@ -157,6 +160,12 @@ public class TableResultImpl implements TableResultInternal {
         return cachedPlan;
     }
 
+    @Nullable
+    @Override
+    public String getClusterId() {
+        return clusterId;
+    }
+
     @Override
     public void print() {
         Iterator<RowData> it = resultProvider.toInternalIterator();
@@ -176,6 +185,7 @@ public class TableResultImpl implements TableResultInternal {
         private ResultProvider resultProvider = null;
         private PrintStyle printStyle = null;
         private CachedPlan cachedPlan = null;
+        private String clusterId = null;
 
         private Builder() {}
 
@@ -245,13 +255,24 @@ public class TableResultImpl implements TableResultInternal {
             return this;
         }
 
+        public Builder setClusterId(String clusterId) {
+            this.clusterId = clusterId;
+            return this;
+        }
+
         /** Returns a {@link TableResult} instance. */
         public TableResultInternal build() {
             if (printStyle == null) {
                 printStyle = PrintStyle.rawContent(resultProvider.getRowDataStringConverter());
             }
             return new TableResultImpl(
-                    jobClient, resolvedSchema, resultKind, resultProvider, printStyle, cachedPlan);
+                    jobClient,
+                    resolvedSchema,
+                    resultKind,
+                    resultProvider,
+                    printStyle,
+                    cachedPlan,
+                    clusterId);
         }
     }
 }

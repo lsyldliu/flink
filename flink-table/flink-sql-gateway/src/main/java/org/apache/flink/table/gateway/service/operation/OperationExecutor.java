@@ -28,6 +28,7 @@ import org.apache.flink.client.deployment.DefaultClusterClientServiceLoader;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -50,6 +51,9 @@ import org.apache.flink.table.catalog.ObjectIdentifier;
 import org.apache.flink.table.catalog.ResolvedCatalogBaseTable;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.catalog.UnresolvedIdentifier;
+import org.apache.flink.table.catalog.dynamic.CatalogDynamicTable;
+import org.apache.flink.table.catalog.dynamic.ContinuousJobInfo;
+import org.apache.flink.table.catalog.dynamic.RefreshHandler;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
@@ -62,8 +66,10 @@ import org.apache.flink.table.functions.FunctionDefinition;
 import org.apache.flink.table.functions.FunctionIdentifier;
 import org.apache.flink.table.gateway.api.operation.OperationHandle;
 import org.apache.flink.table.gateway.api.results.FunctionInfo;
+import org.apache.flink.table.gateway.api.results.ResultSet;
 import org.apache.flink.table.gateway.api.results.TableInfo;
 import org.apache.flink.table.gateway.environment.SqlGatewayStreamExecutionEnvironment;
+import org.apache.flink.table.gateway.rest.serde.JsonSerdeUtil;
 import org.apache.flink.table.gateway.service.context.SessionContext;
 import org.apache.flink.table.gateway.service.result.ResultFetcher;
 import org.apache.flink.table.gateway.service.utils.SqlExecutionException;
@@ -95,6 +101,9 @@ import org.apache.flink.table.operations.ddl.CreateCatalogFunctionOperation;
 import org.apache.flink.table.operations.ddl.CreateOperation;
 import org.apache.flink.table.operations.ddl.CreateTempSystemFunctionOperation;
 import org.apache.flink.table.operations.ddl.DropOperation;
+import org.apache.flink.table.operations.ddl.dynamic.AlterDynamicTableChangeOperation;
+import org.apache.flink.table.operations.ddl.dynamic.CreateDynamicTableOperation;
+import org.apache.flink.table.operations.ddl.dynamic.DynamicTableOperation;
 import org.apache.flink.table.resource.ResourceManager;
 import org.apache.flink.table.utils.DateTimeUtils;
 import org.apache.flink.util.CollectionUtil;
@@ -106,6 +115,7 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -120,7 +130,9 @@ import java.util.stream.Collectors;
 
 import static org.apache.flink.api.common.RuntimeExecutionMode.STREAMING;
 import static org.apache.flink.configuration.ExecutionOptions.RUNTIME_MODE;
+import static org.apache.flink.configuration.PipelineOptions.NAME;
 import static org.apache.flink.table.api.internal.TableResultInternal.TABLE_RESULT_OK;
+import static org.apache.flink.table.gateway.service.utils.Constants.CLUSTER_ID;
 import static org.apache.flink.table.gateway.service.utils.Constants.COMPLETION_CANDIDATES;
 import static org.apache.flink.table.gateway.service.utils.Constants.JOB_ID;
 import static org.apache.flink.table.gateway.service.utils.Constants.JOB_NAME;
@@ -489,6 +501,8 @@ public class OperationExecutor {
                 || op instanceof CreateCatalogFunctionOperation
                 || op instanceof ShowFunctionsOperation) {
             return callExecutableOperation(handle, (ExecutableOperation) op);
+        } else if (op instanceof DynamicTableOperation) {
+            return callDynamicTableOperation(tableEnv, handle, op, statement);
         } else {
             return callOperation(tableEnv, handle, op);
         }
@@ -590,17 +604,17 @@ public class OperationExecutor {
             return ResultFetcher.fromTableResult(handle, result, false);
         }
 
-        return fetchJobId(result, handle);
+        return fetchJobInfo(result, handle);
     }
 
     private ResultFetcher callExecuteOperation(
             TableEnvironmentInternal tableEnv,
             OperationHandle handle,
             Operation executePlanOperation) {
-        return fetchJobId(tableEnv.executeInternal(executePlanOperation), handle);
+        return fetchJobInfo(tableEnv.executeInternal(executePlanOperation), handle);
     }
 
-    private ResultFetcher fetchJobId(TableResultInternal result, OperationHandle handle) {
+    private ResultFetcher fetchJobInfo(TableResultInternal result, OperationHandle handle) {
         JobID jobID =
                 result.getJobClient()
                         .orElseThrow(
@@ -612,9 +626,13 @@ public class OperationExecutor {
                         .getJobID();
         return ResultFetcher.fromResults(
                 handle,
-                ResolvedSchema.of(Column.physical(JOB_ID, DataTypes.STRING())),
+                ResolvedSchema.of(
+                        Column.physical(CLUSTER_ID, DataTypes.STRING()),
+                        Column.physical(JOB_ID, DataTypes.STRING())),
                 Collections.singletonList(
-                        GenericRowData.of(StringData.fromString(jobID.toString()))),
+                        GenericRowData.of(
+                                StringData.fromString(result.getClusterId()),
+                                StringData.fromString(jobID.toString()))),
                 jobID,
                 result.getResultKind());
     }
@@ -824,5 +842,98 @@ public class OperationExecutor {
          * @throws FlinkException if something goes wrong
          */
         Result runAction(ClusterClient<ClusterID> clusterClient) throws FlinkException;
+    }
+
+    private ResultFetcher callDynamicTableOperation(
+            TableEnvironmentInternal tableEnv,
+            OperationHandle handle,
+            Operation op,
+            String statement) {
+        if (op instanceof CreateDynamicTableOperation) {
+            // Create Dynamic Table in catalog first.
+            tableEnv.executeInternal(op);
+            // Create background refresh job
+            CreateDynamicTableOperation dynamicTableOperation = (CreateDynamicTableOperation) op;
+            CatalogDynamicTable catalogDynamicTable =
+                    dynamicTableOperation.getCatalogDynamicTable();
+
+            CatalogDynamicTable.RefreshMode refreshMode =
+                    catalogDynamicTable.getRefreshJobHandler().getActualRefreshMode();
+            if (refreshMode == CatalogDynamicTable.RefreshMode.CONTINUOUS) {
+                // Set pipeline name
+                String jobName =
+                        String.format(
+                                "Dynamic_table_%s_refresh_job",
+                                dynamicTableOperation.getTableIdentifier());
+                executionConfig.set(NAME, jobName);
+                // Set execution mode in executionConfig, which is only work for this execution
+                executionConfig.set(RUNTIME_MODE, STREAMING);
+                // Set checkpoint & minibatch related options.
+                // Generate insert into statement
+                String insertStatement =
+                        String.format(
+                                "INSERT INTO %s %s",
+                                dynamicTableOperation.getTableIdentifier(),
+                                catalogDynamicTable.getDefinitionQuery());
+                // submit job
+                ResultFetcher resultFetcher = executeStatement(handle, insertStatement);
+                // get job info
+                // execution.target: remote
+                // clusterId: yarn.application.id/kubernetes.cluster-id/NONE
+                // jobId
+                List<RowData> results = fetchAllResults(resultFetcher);
+                String clusterId = results.get(0).getString(0).toString();
+                String jobId = results.get(0).getString(1).toString();
+                String executeTarget =
+                        sessionContext.getSessionConf().get(DeploymentOptions.TARGET);
+                ContinuousJobInfo continuousJobInfo =
+                        new ContinuousJobInfo(executeTarget, clusterId, jobId);
+                String jsonJobInfo = JsonSerdeUtil.toJson(continuousJobInfo);
+                RefreshHandler refreshHandler =
+                        new RefreshHandler(
+                                catalogDynamicTable.getRefreshJobHandler().getActualRefreshMode(),
+                                RefreshHandler.State.ACTIVATED,
+                                jsonJobInfo);
+                // update job info to Catalog
+                CatalogDynamicTable updatedDynamicTable =
+                        CatalogDynamicTable.of(
+                                catalogDynamicTable.getUnresolvedSchema(),
+                                catalogDynamicTable.getComment(),
+                                catalogDynamicTable.getPartitionKeys(),
+                                catalogDynamicTable.getOptions(),
+                                catalogDynamicTable.getSnapshot().isPresent()
+                                        ? catalogDynamicTable.getSnapshot().get()
+                                        : null,
+                                catalogDynamicTable.getDefinitionQuery(),
+                                catalogDynamicTable.getFreshness(),
+                                catalogDynamicTable.getRefreshMode().isPresent()
+                                        ? catalogDynamicTable.getRefreshMode().get()
+                                        : null,
+                                refreshHandler);
+                AlterDynamicTableChangeOperation alterDynamicTableChangeOperation =
+                        new AlterDynamicTableChangeOperation(
+                                dynamicTableOperation.getTableIdentifier(),
+                                Collections.emptyList(),
+                                updatedDynamicTable);
+                callExecutableOperation(handle, alterDynamicTableChangeOperation);
+                // return job info
+                return resultFetcher;
+            } else {
+
+            }
+        }
+
+        return null;
+    }
+
+    private List<RowData> fetchAllResults(ResultFetcher resultFetcher) {
+        Long token = 0L;
+        List<RowData> results = new ArrayList<>();
+        while (token != null) {
+            ResultSet result = resultFetcher.fetchResults(token, Integer.MAX_VALUE);
+            results.addAll(result.getData());
+            token = result.getNextToken();
+        }
+        return results;
     }
 }

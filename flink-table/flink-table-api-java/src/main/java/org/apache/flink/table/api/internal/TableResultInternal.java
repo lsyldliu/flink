@@ -50,4 +50,7 @@ public interface TableResultInternal extends TableResult {
 
     @Nullable
     CachedPlan getCachedPlan();
+
+    @Nullable
+    String getClusterId();
 }

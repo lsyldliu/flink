@@ -18,5 +18,8 @@
 
 package org.apache.flink.table.operations.ddl.dynamic;
 
+import org.apache.flink.annotation.Internal;
+
 /** The marker interface for dynamic table. */
+@Internal
 public interface DynamicTableOperation {}

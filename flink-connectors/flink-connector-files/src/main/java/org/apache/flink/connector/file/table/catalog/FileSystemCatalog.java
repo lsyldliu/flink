@@ -72,11 +72,13 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.connector.file.table.FileSystemConnectorOptions.PATH;
 import static org.apache.flink.util.Preconditions.checkArgument;
 
 /** A catalog implementation for {@link FileSystem}. */
@@ -390,6 +392,7 @@ public class FileSystemCatalog extends AbstractCatalog {
 
     private Tuple2<String, String> getJsonTableSchema(
             ObjectPath tablePath, CatalogBaseTable catalogTable) {
+        final String tablePathStr = inferTablePath(catalogPathStr, tablePath);
         ResolvedCatalogBaseTable resolvedCatalogBaseTable = (ResolvedCatalogBaseTable) catalogTable;
         CatalogBaseTable.TableKind tableKind = catalogTable.getTableKind();
         ResolvedSchema resolvedSchema = resolvedCatalogBaseTable.getResolvedSchema();
@@ -398,7 +401,8 @@ public class FileSystemCatalog extends AbstractCatalog {
                                 resolvedSchema.toPhysicalRowDataType().getLogicalType())
                         .toString();
         String comment = catalogTable.getComment();
-        Map<String, String> options = catalogTable.getOptions();
+        Map<String, String> options = new HashMap<>(catalogTable.getOptions());
+        options.put(PATH.key(), tablePathStr);
         String pkConstraintName = null;
         String pkColumns = null;
         if (resolvedSchema.getPrimaryKey().isPresent()) {
@@ -445,14 +449,15 @@ public class FileSystemCatalog extends AbstractCatalog {
                         refreshHandler);
 
         String jsonSchema = JsonSerdeUtil.toJson(tableSchema);
-        final String tablePathStr = inferTablePath(catalogPathStr, tablePath);
         return Tuple2.of(tablePathStr, jsonSchema);
     }
 
     @Override
     public void alterTable(
             ObjectPath tablePath, CatalogBaseTable newTable, boolean ignoreIfNotExists)
-            throws TableNotExistException, CatalogException {}
+            throws TableNotExistException, CatalogException {
+        throw new UnsupportedOperationException("This method is not implemented");
+    }
 
     @Override
     public void alterTable(
@@ -491,7 +496,7 @@ public class FileSystemCatalog extends AbstractCatalog {
     @Override
     public List<CatalogPartitionSpec> listPartitions(ObjectPath tablePath)
             throws TableNotExistException, TableNotPartitionedException, CatalogException {
-        return null;
+        return Collections.emptyList();
     }
 
     @Override
@@ -499,14 +504,14 @@ public class FileSystemCatalog extends AbstractCatalog {
             ObjectPath tablePath, CatalogPartitionSpec partitionSpec)
             throws TableNotExistException, TableNotPartitionedException,
                     PartitionSpecInvalidException, CatalogException {
-        return null;
+        return Collections.emptyList();
     }
 
     @Override
     public List<CatalogPartitionSpec> listPartitionsByFilter(
             ObjectPath tablePath, List<Expression> filters)
             throws TableNotExistException, TableNotPartitionedException, CatalogException {
-        return null;
+        return Collections.emptyList();
     }
 
     @Override

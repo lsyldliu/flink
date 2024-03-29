@@ -38,6 +38,8 @@ import org.apache.flink.table.planner.utils.OperationConverterUtils;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 
+import javax.annotation.Nullable;
+
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -45,6 +47,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import static org.apache.flink.table.api.config.DynamicTableConfigOptions.DYNAMIC_TABLE_FRESHNESS_THRESHOLD;
 
 /** A converter for {@link SqlCreateDynamicTable}. */
 public class SqlCreateDynamicTableConverter implements SqlNodeConverter<SqlCreateDynamicTable> {
@@ -105,6 +109,7 @@ public class SqlCreateDynamicTableConverter implements SqlNodeConverter<SqlCreat
         Schema.Builder builder =
                 Schema.newBuilder().fromResolvedSchema(operation.getResolvedSchema());
         // get primary key
+        // TODO: validate primary key fields nullability
         Optional<SqlTableConstraint> sqlTableConstraint =
                 sqlCreateDynamicTable.getTableConstraint();
         if (sqlTableConstraint.isPresent()) {
@@ -121,6 +126,13 @@ public class SqlCreateDynamicTableConverter implements SqlNodeConverter<SqlCreat
             builder.primaryKeyNamed(constraintName, primaryKeyColumns);
         }
 
+        // Derive the actual refresh mode first.
+        RefreshHandler refreshHandler =
+                initializeRefreshHandler(
+                        context.getTableConfig().get(DYNAMIC_TABLE_FRESHNESS_THRESHOLD),
+                        freshness,
+                        refreshMode);
+
         CatalogDynamicTable dynamicTable =
                 CatalogDynamicTable.of(
                         builder.build(),
@@ -131,11 +143,29 @@ public class SqlCreateDynamicTableConverter implements SqlNodeConverter<SqlCreat
                         expandedQuery,
                         freshness,
                         refreshMode,
-                        new RefreshHandler(
-                                CatalogDynamicTable.RefreshMode.CONTINUOUS,
-                                RefreshHandler.State.INITIALIZING,
-                                null));
+                        refreshHandler);
 
         return new CreateDynamicTableOperation(identifier, dynamicTable);
+    }
+
+    private RefreshHandler initializeRefreshHandler(
+            Duration threshold,
+            Duration specifiedFreshness,
+            @Nullable CatalogDynamicTable.RefreshMode specifiedRefreshMode) {
+        // If the refresh mode is specified manually, so use it.
+        if (specifiedRefreshMode != null) {
+            return new RefreshHandler(
+                    specifiedRefreshMode, RefreshHandler.State.INITIALIZING, null);
+        }
+
+        if (specifiedFreshness.compareTo(threshold) <= 0) {
+            return new RefreshHandler(
+                    CatalogDynamicTable.RefreshMode.CONTINUOUS,
+                    RefreshHandler.State.INITIALIZING,
+                    null);
+        } else {
+            return new RefreshHandler(
+                    CatalogDynamicTable.RefreshMode.FULL, RefreshHandler.State.INITIALIZING, null);
+        }
     }
 }

@@ -134,6 +134,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
+import static org.apache.flink.configuration.DeploymentOptions.TARGET;
 import static org.apache.flink.table.api.config.TableConfigOptions.TABLE_DML_SYNC;
 
 /**
@@ -1046,6 +1047,7 @@ public class TableEnvironmentImpl implements TableEnvironmentInternal {
                             .resultProvider(
                                     new InsertResultProvider(affectedRowCounts)
                                             .setJobClient(jobClient))
+                            .setClusterId(getClusterId())
                             .build();
             if (tableConfig.get(TABLE_DML_SYNC)) {
                 try {
@@ -1058,6 +1060,27 @@ public class TableEnvironmentImpl implements TableEnvironmentInternal {
             return result;
         } catch (Exception e) {
             throw new TableException("Failed to execute sql", e);
+        }
+    }
+    /**
+     * Return the job cluster info after it has been submitted to cluster. Application mode doesn't
+     * use this method.
+     */
+    private String getClusterId() {
+        Map<String, String> config = execEnv.getConfiguration().toMap();
+        String executionTarget = config.get(TARGET.key());
+        // TODO: The better way is to implement a factory to get and set cluster info
+        switch (executionTarget) {
+            case "yarn-session":
+            case "yarn-application":
+            case "yarn-per-job":
+                return config.get("yarn.application.id");
+            case "kubernetes-session":
+            case "kubernetes-application":
+                return config.get("kubernetes.cluster-id");
+            default:
+                // Other target doesn't need clusterId
+                return "NONE";
         }
     }
 

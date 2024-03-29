@@ -18,6 +18,9 @@
 
 package org.apache.flink.table.planner.operations.converters;
 
+import org.apache.flink.annotation.Internal;
+import org.apache.flink.table.api.TableConfig;
+import org.apache.flink.table.api.TableEnvironment;
 import org.apache.flink.table.catalog.CatalogManager;
 import org.apache.flink.table.operations.Operation;
 import org.apache.flink.table.planner.utils.Expander;
@@ -45,6 +48,7 @@ import java.util.Optional;
  *
  * @see SqlNodeConverters
  */
+@Internal
 public interface SqlNodeConverter<S extends SqlNode> {
 
     /**
@@ -71,6 +75,9 @@ public interface SqlNodeConverter<S extends SqlNode> {
 
     /** Context of {@link SqlNodeConverter}. */
     interface ConvertContext {
+
+        /** Returns the {@link TableConfig} defined in {@link TableEnvironment}. */
+        TableConfig getTableConfig();
 
         /** Returns the {@link SqlValidator} in the convert context. */
         SqlValidator getSqlValidator();

@@ -46,7 +46,7 @@ public class CreateDynamicTableOperation implements CreateOperation, DynamicTabl
 
     @Override
     public TableResultInternal execute(Context ctx) {
-        // create dynamic table
+        // create dynamic table in catalog
         ctx.getCatalogManager().createTable(dynamicTable, tableIdentifier, false);
         return TableResultImpl.TABLE_RESULT_OK;
     }
@@ -55,7 +55,7 @@ public class CreateDynamicTableOperation implements CreateOperation, DynamicTabl
         return tableIdentifier;
     }
 
-    public CatalogDynamicTable getDynamicTable() {
+    public CatalogDynamicTable getCatalogDynamicTable() {
         return dynamicTable;
     }
 

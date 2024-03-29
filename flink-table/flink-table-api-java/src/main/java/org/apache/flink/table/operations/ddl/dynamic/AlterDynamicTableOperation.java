@@ -16,18 +16,26 @@
  * limitations under the License.
  */
 
-package org.apache.flink.table.gateway.service.utils;
+package org.apache.flink.table.operations.ddl.dynamic;
 
-/** Constants used in the SqlGatewayService. */
-public class Constants {
+import org.apache.flink.annotation.Internal;
+import org.apache.flink.table.catalog.ObjectIdentifier;
+import org.apache.flink.table.operations.ddl.AlterOperation;
 
-    public static final String JOB_ID = "job id";
-    public static final String JOB_NAME = "job name";
-    public static final String STATUS = "status";
-    public static final String START_TIME = "start time";
-    public static final String SET_KEY = "key";
-    public static final String SET_VALUE = "value";
-    public static final String COMPLETION_CANDIDATES = "candidates";
-    public static final String SAVEPOINT_PATH = "savepoint path";
-    public static final String CLUSTER_ID = "cluster id";
+/**
+ * Abstract Operation to describe all ALTER DYNAMIC TABLE statements such as rename table /set
+ * properties.
+ */
+@Internal
+public abstract class AlterDynamicTableOperation implements AlterOperation, DynamicTableOperation {
+
+    protected final ObjectIdentifier tableIdentifier;
+
+    public AlterDynamicTableOperation(ObjectIdentifier tableIdentifier) {
+        this.tableIdentifier = tableIdentifier;
+    }
+
+    public ObjectIdentifier getTableIdentifier() {
+        return tableIdentifier;
+    }
 }

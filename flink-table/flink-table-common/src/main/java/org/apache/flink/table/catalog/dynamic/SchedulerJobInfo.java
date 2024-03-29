@@ -16,18 +16,33 @@
  * limitations under the License.
  */
 
-package org.apache.flink.table.gateway.service.utils;
+package org.apache.flink.table.catalog.dynamic;
 
-/** Constants used in the SqlGatewayService. */
-public class Constants {
+import org.apache.flink.annotation.Internal;
 
-    public static final String JOB_ID = "job id";
-    public static final String JOB_NAME = "job name";
-    public static final String STATUS = "status";
-    public static final String START_TIME = "start time";
-    public static final String SET_KEY = "key";
-    public static final String SET_VALUE = "value";
-    public static final String COMPLETION_CANDIDATES = "candidates";
-    public static final String SAVEPOINT_PATH = "savepoint path";
-    public static final String CLUSTER_ID = "cluster id";
+/** Scheduler job info. */
+@Internal
+public class SchedulerJobInfo {
+
+    private final String schedulerType;
+    private final String endpoint;
+    private final String workflowId;
+
+    public SchedulerJobInfo(String schedulerType, String endpoint, String workflowId) {
+        this.schedulerType = schedulerType;
+        this.endpoint = endpoint;
+        this.workflowId = workflowId;
+    }
+
+    public String getSchedulerType() {
+        return schedulerType;
+    }
+
+    public String getEndpoint() {
+        return endpoint;
+    }
+
+    public String getWorkflowId() {
+        return workflowId;
+    }
 }
