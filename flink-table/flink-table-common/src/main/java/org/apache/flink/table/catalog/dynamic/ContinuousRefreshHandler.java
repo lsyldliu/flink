@@ -20,15 +20,17 @@ package org.apache.flink.table.catalog.dynamic;
 
 import org.apache.flink.annotation.Internal;
 
-/** Continuous Flink job info. */
+import java.io.Serializable;
+
+/** Continuous refresh handler of Flink streaming job. */
 @Internal
-public class ContinuousJobInfo {
+public class ContinuousRefreshHandler implements RefreshHandler, Serializable {
 
     private final String executionTarget;
     private final String clusterId;
     private final String jobId;
 
-    public ContinuousJobInfo(String executionTarget, String clusterId, String jobId) {
+    public ContinuousRefreshHandler(String executionTarget, String clusterId, String jobId) {
         this.executionTarget = executionTarget;
         this.clusterId = clusterId;
         this.jobId = jobId;
@@ -44,5 +46,12 @@ public class ContinuousJobInfo {
 
     public String getJobId() {
         return jobId;
+    }
+
+    @Override
+    public String asSummaryString() {
+        return String.format(
+                "{\nexecutionTarget: %s,\n clusterId: %s,\n jobId: %s\n}",
+                executionTarget, clusterId, jobId);
     }
 }

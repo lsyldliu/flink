@@ -52,8 +52,8 @@ import org.apache.flink.table.catalog.ResolvedCatalogBaseTable;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.catalog.UnresolvedIdentifier;
 import org.apache.flink.table.catalog.dynamic.CatalogDynamicTable;
-import org.apache.flink.table.catalog.dynamic.ContinuousJobInfo;
-import org.apache.flink.table.catalog.dynamic.RefreshHandler;
+import org.apache.flink.table.catalog.dynamic.ContinuousRefreshHandler;
+import org.apache.flink.table.catalog.dynamic.ContinuousRefreshHandlerSerializer;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
@@ -69,7 +69,6 @@ import org.apache.flink.table.gateway.api.results.FunctionInfo;
 import org.apache.flink.table.gateway.api.results.ResultSet;
 import org.apache.flink.table.gateway.api.results.TableInfo;
 import org.apache.flink.table.gateway.environment.SqlGatewayStreamExecutionEnvironment;
-import org.apache.flink.table.gateway.rest.serde.JsonSerdeUtil;
 import org.apache.flink.table.gateway.service.context.SessionContext;
 import org.apache.flink.table.gateway.service.result.ResultFetcher;
 import org.apache.flink.table.gateway.service.utils.SqlExecutionException;
@@ -113,6 +112,7 @@ import org.apache.flink.util.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -857,8 +857,7 @@ public class OperationExecutor {
             CatalogDynamicTable catalogDynamicTable =
                     dynamicTableOperation.getCatalogDynamicTable();
 
-            CatalogDynamicTable.RefreshMode refreshMode =
-                    catalogDynamicTable.getRefreshJobHandler().getActualRefreshMode();
+            CatalogDynamicTable.RefreshMode refreshMode = catalogDynamicTable.getRefreshMode();
             if (refreshMode == CatalogDynamicTable.RefreshMode.CONTINUOUS) {
                 // Set pipeline name
                 String jobName =
@@ -868,14 +867,14 @@ public class OperationExecutor {
                 executionConfig.set(NAME, jobName);
                 // Set execution mode in executionConfig, which is only work for this execution
                 executionConfig.set(RUNTIME_MODE, STREAMING);
-                // Set checkpoint & minibatch related options.
+                // TODO Set checkpoint & minibatch related options.
                 // Generate insert into statement
                 String insertStatement =
                         String.format(
                                 "INSERT INTO %s %s",
                                 dynamicTableOperation.getTableIdentifier(),
                                 catalogDynamicTable.getDefinitionQuery());
-                // submit job
+                // submit streaming job
                 ResultFetcher resultFetcher = executeStatement(handle, insertStatement);
                 // get job info
                 // execution.target: remote
@@ -886,15 +885,23 @@ public class OperationExecutor {
                 String jobId = results.get(0).getString(1).toString();
                 String executeTarget =
                         sessionContext.getSessionConf().get(DeploymentOptions.TARGET);
-                ContinuousJobInfo continuousJobInfo =
-                        new ContinuousJobInfo(executeTarget, clusterId, jobId);
-                String jsonJobInfo = JsonSerdeUtil.toJson(continuousJobInfo);
-                RefreshHandler refreshHandler =
-                        new RefreshHandler(
-                                catalogDynamicTable.getRefreshJobHandler().getActualRefreshMode(),
-                                RefreshHandler.State.ACTIVATED,
-                                jsonJobInfo);
-                // update job info to Catalog
+                ContinuousRefreshHandler continuousRefreshHandler =
+                        new ContinuousRefreshHandler(executeTarget, clusterId, jobId);
+                byte[] serializedBytes;
+                try {
+                    serializedBytes =
+                            ContinuousRefreshHandlerSerializer.INSTANCE.serialize(
+                                    continuousRefreshHandler);
+                    ContinuousRefreshHandler handler =
+                            ContinuousRefreshHandlerSerializer.INSTANCE.deserialize(
+                                    serializedBytes);
+                    System.out.println();
+                } catch (IOException e) {
+                    throw new TableException(
+                            "Serialize ContinuousRefreshHandler occur exception.", e);
+                }
+
+                // update RefreshHandler to Catalog
                 CatalogDynamicTable updatedDynamicTable =
                         CatalogDynamicTable.of(
                                 catalogDynamicTable.getUnresolvedSchema(),
@@ -906,17 +913,18 @@ public class OperationExecutor {
                                         : null,
                                 catalogDynamicTable.getDefinitionQuery(),
                                 catalogDynamicTable.getFreshness(),
-                                catalogDynamicTable.getRefreshMode().isPresent()
-                                        ? catalogDynamicTable.getRefreshMode().get()
-                                        : null,
-                                refreshHandler);
+                                catalogDynamicTable.getLogicalRefreshMode(),
+                                catalogDynamicTable.getRefreshMode(),
+                                CatalogDynamicTable.RefreshStatus.ACTIVATED,
+                                continuousRefreshHandler.asSummaryString(),
+                                serializedBytes);
                 AlterDynamicTableChangeOperation alterDynamicTableChangeOperation =
                         new AlterDynamicTableChangeOperation(
                                 dynamicTableOperation.getTableIdentifier(),
                                 Collections.emptyList(),
                                 updatedDynamicTable);
                 callExecutableOperation(handle, alterDynamicTableChangeOperation);
-                // return job info
+                // return streaming job info
                 return resultFetcher;
             } else {
 
