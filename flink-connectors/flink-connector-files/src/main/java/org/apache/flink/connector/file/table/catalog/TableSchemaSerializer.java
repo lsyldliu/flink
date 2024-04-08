@@ -20,7 +20,6 @@ package org.apache.flink.connector.file.table.catalog;
 
 import org.apache.flink.table.catalog.CatalogBaseTable;
 import org.apache.flink.table.catalog.dynamic.CatalogDynamicTable;
-import org.apache.flink.table.catalog.dynamic.RefreshHandler;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonGenerator;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonParser;
@@ -89,18 +88,34 @@ public class TableSchemaSerializer
         Duration freshness =
                 ctx.readValue(traverse(freshnessNode, jsonParser.getCodec()), Duration.class);
 
-        JsonNode refreshModeNode = jsonNode.get("refreshMode");
-        CatalogDynamicTable.RefreshMode refreshMode = null;
-        if (refreshModeNode != null) {
-            refreshMode =
-                    ctx.readValue(
-                            traverse(refreshModeNode, jsonParser.getCodec()),
-                            CatalogDynamicTable.RefreshMode.class);
-        }
-        JsonNode refreshHandlerNode = jsonNode.get("refreshHandler");
-        RefreshHandler refreshHandler =
+        JsonNode logicalRefreshModeNode = jsonNode.get("logicalRefreshMode");
+        CatalogDynamicTable.LogicalRefreshMode logicalRefreshMode =
                 ctx.readValue(
-                        traverse(refreshHandlerNode, jsonParser.getCodec()), RefreshHandler.class);
+                        traverse(logicalRefreshModeNode, jsonParser.getCodec()),
+                        CatalogDynamicTable.LogicalRefreshMode.class);
+
+        JsonNode refreshModeNode = jsonNode.get("refreshMode");
+        CatalogDynamicTable.RefreshMode refreshMode =
+                ctx.readValue(
+                        traverse(refreshModeNode, jsonParser.getCodec()),
+                        CatalogDynamicTable.RefreshMode.class);
+
+        JsonNode refreshStatusNode = jsonNode.get("refreshStatus");
+        CatalogDynamicTable.RefreshStatus refreshStatus =
+                ctx.readValue(
+                        traverse(refreshStatusNode, jsonParser.getCodec()),
+                        CatalogDynamicTable.RefreshStatus.class);
+        JsonNode refreshHandlerDescNode = jsonNode.get("refreshHandlerDescription");
+        String refreshHandlerDesc = null;
+        if (refreshHandlerDescNode != null) {
+            refreshHandlerDesc = refreshHandlerDescNode.asText();
+        }
+
+        JsonNode serializedRefreshHandlerNode = jsonNode.get("serializedRefreshHandler");
+        byte[] serializedRefreshHandler =
+                ctx.readValue(
+                        traverse(serializedRefreshHandlerNode, jsonParser.getCodec()),
+                        byte[].class);
 
         return new TableSchema(
                 tableKind,
@@ -112,8 +127,11 @@ public class TableSchemaSerializer
                 partitionColumns,
                 definitionQuery,
                 freshness,
+                logicalRefreshMode,
                 refreshMode,
-                refreshHandler);
+                refreshStatus,
+                refreshHandlerDesc,
+                serializedRefreshHandler);
     }
 
     @Override
@@ -145,12 +163,15 @@ public class TableSchemaSerializer
 
         generator.writeStringField("definitionQuery", tableSchema.getDefinitionQuery());
         generator.writeObjectField("freshness", tableSchema.getFreshness());
-        if (tableSchema.getRefreshMode() != null) {
-            generator.writeObjectField("refreshMode", tableSchema.getRefreshMode());
+        generator.writeObjectField("logicalRefreshMode", tableSchema.getLogicalRefreshMode());
+        generator.writeObjectField("refreshMode", tableSchema.getRefreshMode());
+        generator.writeObjectField("refreshStatus", tableSchema.getRefreshStatus());
+        if (tableSchema.getRefreshHandlerDescription() != null) {
+            generator.writeStringField(
+                    "refreshHandlerDescription", tableSchema.getRefreshHandlerDescription());
         }
-
-        provider.defaultSerializeField(
-                "refreshHandler", tableSchema.getRefreshHandler(), generator);
+        generator.writeBinaryField(
+                "serializedRefreshHandler", tableSchema.getSerializedRefreshHandler());
 
         generator.writeEndObject();
     }

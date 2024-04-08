@@ -19,8 +19,6 @@
 package org.apache.flink.connector.file.table;
 
 import org.apache.flink.connector.file.table.catalog.FileSystemCatalog;
-import org.apache.flink.connector.file.table.catalog.JsonSerdeUtil;
-import org.apache.flink.connector.file.table.catalog.TableSchema;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.Schema;
 import org.apache.flink.table.catalog.CatalogBaseTable;
@@ -75,41 +73,6 @@ public class FileSystemCatalogTest {
     }
 
     @Test
-    public void testRefreshHandler() {
-        RefreshHandler refreshHandler =
-                new RefreshHandler(
-                        CatalogDynamicTable.RefreshMode.CONTINUOUS,
-                        RefreshHandler.State.INITIALIZING,
-                        null);
-
-        String refreshHandlerStr = JsonSerdeUtil.toJson(refreshHandler);
-        System.out.println(refreshHandlerStr);
-        RefreshHandler deHandler = JsonSerdeUtil.fromJson(refreshHandlerStr, RefreshHandler.class);
-        System.out.println(deHandler);
-
-        Map<String, String> options = new HashMap<>();
-        options.put("key1", "val1");
-        options.put("key2", "val2");
-        TableSchema tableSchema =
-                new TableSchema(
-                        CatalogBaseTable.TableKind.DYNAMIC_TABLE,
-                        "{'a': 'INT'}",
-                        "table_comment",
-                        options,
-                        "pk_constraint",
-                        "a,b,c",
-                        "p",
-                        "SELECT * FROM T",
-                        Duration.ofSeconds(10),
-                        CatalogDynamicTable.RefreshMode.CONTINUOUS,
-                        refreshHandler);
-        String jsonSchema = JsonSerdeUtil.toJson(tableSchema);
-        System.out.println(jsonSchema);
-        TableSchema deTableSchema = JsonSerdeUtil.fromJson(jsonSchema, TableSchema.class);
-        System.out.println("xxx");
-    }
-
-    @Test
     public void testCreateCatalogDynamicTable()
             throws TableAlreadyExistException, DatabaseNotExistException, TableNotExistException {
         Schema schema =
@@ -132,12 +95,9 @@ public class FileSystemCatalogTest {
         String definitionQuery = "SELECT * FROM T";
         Duration freshness = Duration.ofSeconds(10);
 
+        CatalogDynamicTable.LogicalRefreshMode logicalRefreshMode =
+                CatalogDynamicTable.LogicalRefreshMode.CONTINUOUS;
         CatalogDynamicTable.RefreshMode refreshMode = CatalogDynamicTable.RefreshMode.CONTINUOUS;
-        RefreshHandler refreshHandler =
-                new RefreshHandler(
-                        CatalogDynamicTable.RefreshMode.CONTINUOUS,
-                        RefreshHandler.State.INITIALIZING,
-                        null);
 
         List<Column> columns = new ArrayList<>();
         columns.add(Column.physical("a", DataTypes.INT()));
@@ -163,8 +123,11 @@ public class FileSystemCatalogTest {
                                 null,
                                 definitionQuery,
                                 freshness,
+                                logicalRefreshMode,
                                 refreshMode,
-                                refreshHandler),
+                                CatalogDynamicTable.RefreshStatus.INITIALIZING,
+                                null,
+                                new byte[0]),
                         resolvedSchema);
 
         ObjectPath tablePath = new ObjectPath("myDb", "myTable");
@@ -175,11 +138,7 @@ public class FileSystemCatalogTest {
 
         CatalogBaseTable catalogBaseTable = fileSystemCatalog.getTable(tablePath);
 
-        RefreshHandler refreshHandler1 =
-                new RefreshHandler(
-                        CatalogDynamicTable.RefreshMode.CONTINUOUS,
-                        RefreshHandler.State.ACTIVATED,
-                        "clusterId&jobId");
+        TestRefreshHandler refreshHandler = new TestRefreshHandler("clusterId&jobId");
         ResolvedCatalogDynamicTable resolvedCatalogDynamicTable1 =
                 new ResolvedCatalogDynamicTable(
                         CatalogDynamicTable.of(
@@ -190,8 +149,11 @@ public class FileSystemCatalogTest {
                                 null,
                                 definitionQuery,
                                 freshness,
+                                logicalRefreshMode,
                                 refreshMode,
-                                refreshHandler1),
+                                CatalogDynamicTable.RefreshStatus.ACTIVATED,
+                                refreshHandler.asSummaryString(),
+                                refreshHandler.toBytes()),
                         resolvedSchema);
         fileSystemCatalog.alterTable(
                 tablePath, resolvedCatalogDynamicTable1, Collections.emptyList(), false);
@@ -201,5 +163,23 @@ public class FileSystemCatalogTest {
         fileSystemCatalog.dropTable(tablePath, false);
 
         assertFalse(fileSystemCatalog.tableExists(tablePath));
+    }
+
+    private static class TestRefreshHandler implements RefreshHandler {
+
+        private final String handlerString;
+
+        public TestRefreshHandler(String handlerString) {
+            this.handlerString = handlerString;
+        }
+
+        @Override
+        public String asSummaryString() {
+            return "test refresh handler";
+        }
+
+        public byte[] toBytes() {
+            return handlerString.getBytes();
+        }
     }
 }

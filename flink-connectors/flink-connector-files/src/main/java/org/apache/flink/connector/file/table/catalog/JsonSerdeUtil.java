@@ -18,8 +18,6 @@
 
 package org.apache.flink.connector.file.table.catalog;
 
-import org.apache.flink.table.catalog.dynamic.RefreshHandler;
-
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonGenerator;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonParser;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
@@ -73,11 +71,6 @@ public class JsonSerdeUtil {
                 TableSchema.class,
                 TableSchemaSerializer.INSTANCE,
                 TableSchemaSerializer.INSTANCE);
-        registerJsonObjects(
-                module,
-                RefreshHandler.class,
-                RefreshHandlerSerializer.INSTANCE,
-                RefreshHandlerSerializer.INSTANCE);
         return module;
     }
 

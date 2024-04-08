@@ -27,6 +27,8 @@ import org.apache.flink.table.catalog.ResolvedCatalogTable;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.util.Preconditions;
 
+import javax.annotation.Nullable;
+
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -96,6 +98,11 @@ public class ResolvedCatalogDynamicTable
     }
 
     @Override
+    public Optional<Long> getSnapshot() {
+        return origin.getSnapshot();
+    }
+
+    @Override
     public CatalogDynamicTable getOrigin() {
         return origin;
     }
@@ -116,15 +123,32 @@ public class ResolvedCatalogDynamicTable
     }
 
     @Override
-    public Optional<RefreshMode> getRefreshMode() {
+    public LogicalRefreshMode getLogicalRefreshMode() {
+        return origin.getLogicalRefreshMode();
+    }
+
+    @Override
+    public RefreshMode getRefreshMode() {
         return origin.getRefreshMode();
     }
 
     @Override
-    public RefreshHandler getRefreshJobHandler() {
-        return origin.getRefreshJobHandler();
+    public RefreshStatus getRefreshStatus() {
+        return origin.getRefreshStatus();
     }
 
+    @Override
+    public Optional<String> getRefreshHandlerDescription() {
+        return origin.getRefreshHandlerDescription();
+    }
+
+    @Nullable
+    @Override
+    public byte[] getSerializedRefreshHandler() {
+        return origin.getSerializedRefreshHandler();
+    }
+
+    /** Convert ResolvedCatalogDynamicTable to a ResolvedCatalogTable. */
     public ResolvedCatalogTable toResolvedCatalogTable() {
         return new ResolvedCatalogTable(
                 CatalogTable.of(
@@ -132,7 +156,7 @@ public class ResolvedCatalogDynamicTable
                         getComment(),
                         getPartitionKeys(),
                         getOptions(),
-                        null),
+                        getSnapshot().orElse(null)),
                 getResolvedSchema());
     }
 }

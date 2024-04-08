@@ -40,7 +40,6 @@ import org.apache.flink.table.catalog.ResolvedCatalogTable;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.catalog.TableChange;
 import org.apache.flink.table.catalog.dynamic.CatalogDynamicTable;
-import org.apache.flink.table.catalog.dynamic.RefreshHandler;
 import org.apache.flink.table.catalog.dynamic.ResolvedCatalogDynamicTable;
 import org.apache.flink.table.catalog.exceptions.CatalogException;
 import org.apache.flink.table.catalog.exceptions.DatabaseAlreadyExistException;
@@ -281,8 +280,11 @@ public class FileSystemCatalog extends AbstractCatalog {
                         null,
                         tableSchema.getDefinitionQuery(),
                         tableSchema.getFreshness(),
+                        tableSchema.getLogicalRefreshMode(),
                         tableSchema.getRefreshMode(),
-                        tableSchema.getRefreshHandler());
+                        tableSchema.getRefreshStatus(),
+                        tableSchema.getRefreshHandlerDescription(),
+                        tableSchema.getSerializedRefreshHandler());
             }
         } catch (IOException e) {
             throw new CatalogException(
@@ -412,8 +414,11 @@ public class FileSystemCatalog extends AbstractCatalog {
         String partitionColumns = null;
         String definitionQuery = null;
         Duration freshness = null;
+        CatalogDynamicTable.LogicalRefreshMode logicalRefreshMode = null;
         CatalogDynamicTable.RefreshMode refreshMode = null;
-        RefreshHandler refreshHandler = null;
+        CatalogDynamicTable.RefreshStatus refreshStatus = null;
+        String refreshHandlerDescription = null;
+        byte[] serializableRefreshHandler = null;
         // CatalogBase Table convert to json string, then write
         if (catalogTable.getTableKind() == CatalogBaseTable.TableKind.TABLE) {
             ResolvedCatalogTable resolvedTable = (ResolvedCatalogTable) catalogTable;
@@ -428,10 +433,14 @@ public class FileSystemCatalog extends AbstractCatalog {
             }
             definitionQuery = resolvedCatalogDynamicTable.getDefinitionQuery();
             freshness = resolvedCatalogDynamicTable.getFreshness();
-            if (resolvedCatalogDynamicTable.getRefreshMode().isPresent()) {
-                refreshMode = resolvedCatalogDynamicTable.getRefreshMode().get();
+            logicalRefreshMode = resolvedCatalogDynamicTable.getLogicalRefreshMode();
+            refreshMode = resolvedCatalogDynamicTable.getRefreshMode();
+            refreshStatus = resolvedCatalogDynamicTable.getRefreshStatus();
+            if (resolvedCatalogDynamicTable.getRefreshHandlerDescription().isPresent()) {
+                refreshHandlerDescription =
+                        resolvedCatalogDynamicTable.getRefreshHandlerDescription().get();
             }
-            refreshHandler = resolvedCatalogDynamicTable.getRefreshJobHandler();
+            serializableRefreshHandler = resolvedCatalogDynamicTable.getSerializedRefreshHandler();
         }
 
         TableSchema tableSchema =
@@ -445,8 +454,11 @@ public class FileSystemCatalog extends AbstractCatalog {
                         partitionColumns,
                         definitionQuery,
                         freshness,
+                        logicalRefreshMode,
                         refreshMode,
-                        refreshHandler);
+                        refreshStatus,
+                        refreshHandlerDescription,
+                        serializableRefreshHandler);
 
         String jsonSchema = JsonSerdeUtil.toJson(tableSchema);
         return Tuple2.of(tablePathStr, jsonSchema);

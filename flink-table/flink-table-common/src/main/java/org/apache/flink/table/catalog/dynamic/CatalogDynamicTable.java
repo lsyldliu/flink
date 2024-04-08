@@ -49,26 +49,13 @@ import java.util.Optional;
  * </ul>
  *
  * <p>A catalog implementer can either use {@link #of(Schema, String, List, Map, Long, String,
- * Duration, RefreshMode, RefreshHandler)} for a basic implementation of this interface or create a
- * custom class that allows passing catalog-specific objects all the way down to the connector
- * creation (if necessary).
+ * Duration, LogicalRefreshMode, RefreshMode, RefreshStatus, String, byte[])} for a basic
+ * implementation of this interface or create a custom class that allows passing catalog-specific
+ * objects all the way down to the connector creation (if necessary).
  */
 @PublicEvolving
 public interface CatalogDynamicTable extends CatalogBaseTable {
 
-    /**
-     * Creates an instance of {@link CatalogDynamicTable}.
-     *
-     * @param schema unresolved schema
-     * @param comment optional comment
-     * @param partitionKeys list of partition keys or an empty list if not partitioned
-     * @param options options to configure the connector
-     * @param snapshot table snapshot of the table
-     * @param definitionQuery definition sql query
-     * @param freshness data freshness
-     * @param refreshMode data refresh mode
-     * @param refreshJobHandler refresh job handler
-     */
     static CatalogDynamicTable of(
             Schema schema,
             @Nullable String comment,
@@ -77,8 +64,11 @@ public interface CatalogDynamicTable extends CatalogBaseTable {
             @Nullable Long snapshot,
             String definitionQuery,
             Duration freshness,
-            @Nullable RefreshMode refreshMode,
-            RefreshHandler refreshJobHandler) {
+            LogicalRefreshMode logicalRefreshMode,
+            RefreshMode refreshMode,
+            RefreshStatus refreshStatus,
+            @Nullable String refreshHandlerDescription,
+            byte[] serializedRefreshHandler) {
         return new DefaultCatalogDynamicTable(
                 schema,
                 comment,
@@ -87,8 +77,37 @@ public interface CatalogDynamicTable extends CatalogBaseTable {
                 snapshot,
                 definitionQuery,
                 freshness,
+                logicalRefreshMode,
                 refreshMode,
-                refreshJobHandler);
+                refreshStatus,
+                refreshHandlerDescription,
+                serializedRefreshHandler);
+    }
+
+    static CatalogDynamicTable of(
+            Schema schema,
+            @Nullable String comment,
+            List<String> partitionKeys,
+            Map<String, String> options,
+            @Nullable Long snapshot,
+            String definitionQuery,
+            Duration freshness,
+            LogicalRefreshMode logicalRefreshMode,
+            RefreshMode refreshMode,
+            RefreshStatus refreshStatus) {
+        return of(
+                schema,
+                comment,
+                partitionKeys,
+                options,
+                snapshot,
+                definitionQuery,
+                freshness,
+                logicalRefreshMode,
+                refreshMode,
+                refreshStatus,
+                null,
+                new byte[0]);
     }
 
     @Override
@@ -119,9 +138,7 @@ public interface CatalogDynamicTable extends CatalogBaseTable {
     CatalogDynamicTable copy(Map<String, String> options);
 
     /** Return the snapshot specified for the table. Return Optional.empty() if not specified. */
-    default Optional<Long> getSnapshot() {
-        return Optional.empty();
-    }
+    Optional<Long> getSnapshot();
 
     /**
      * The definition query text of dynamic table, text is expanded in contrast to the original SQL.
@@ -137,19 +154,62 @@ public interface CatalogDynamicTable extends CatalogBaseTable {
      */
     String getDefinitionQuery();
 
-    /** Get the freshness of dynamic table which is used to determine the data refresh mode. */
+    /** Get the freshness of dynamic table which is used to determine the physical refresh mode. */
     Duration getFreshness();
 
-    /** Get the refresh mode of dynamic table. */
-    Optional<RefreshMode> getRefreshMode();
+    /** Get the logical refresh mode of dynamic table. */
+    LogicalRefreshMode getLogicalRefreshMode();
 
-    /** Get the refresh job handler of dynamic table. */
-    RefreshHandler getRefreshJobHandler();
+    /** Get the physical refresh mode of dynamic table. */
+    RefreshMode getRefreshMode();
 
-    /** The refresh mode of dynamic table. */
+    /** Get the refresh status of dynamic table. */
+    RefreshStatus getRefreshStatus();
+
+    /** Return summary description of refresh handler. */
+    Optional<String> getRefreshHandlerDescription();
+
+    /**
+     * Return the serialized refresh handler of dynamic table. This will not be used for describe
+     * table.
+     */
+    @Nullable
+    byte[] getSerializedRefreshHandler();
+
+    /** The logical refresh mode of dynamic table. */
+    @PublicEvolving
+    enum LogicalRefreshMode {
+        /**
+         * The refresh pipeline will be executed in continuous mode, corresponding to {@link
+         * RefreshMode#CONTINUOUS}.
+         */
+        CONTINUOUS,
+
+        /**
+         * The refresh pipeline will be executed in full mode, corresponding to {@link
+         * RefreshMode#FULL}.
+         */
+        FULL,
+
+        /**
+         * The refresh pipeline mode is determined by freshness of dynamic table, either {@link
+         * RefreshMode#FULL} or {@link RefreshMode#CONTINUOUS}.
+         */
+        AUTOMATIC
+    }
+
+    /** The physical refresh mode of dynamic table. */
     @PublicEvolving
     enum RefreshMode {
         CONTINUOUS,
         FULL
+    }
+
+    /** Background refresh pipeline status of dynamic table. */
+    @PublicEvolving
+    enum RefreshStatus {
+        INITIALIZING,
+        ACTIVATED,
+        SUSPENDED
     }
 }

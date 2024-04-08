@@ -26,6 +26,7 @@ import org.apache.flink.table.catalog.CatalogTable;
 import javax.annotation.Nullable;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -47,8 +48,11 @@ public class DefaultCatalogDynamicTable implements CatalogDynamicTable {
 
     private final String definitionQuery;
     private final Duration freshness;
-    private final @Nullable RefreshMode refreshMode;
-    private final RefreshHandler refreshJobHandler;
+    private final LogicalRefreshMode logicalRefreshMode;
+    private final RefreshMode refreshMode;
+    private final RefreshStatus refreshStatus;
+    private final @Nullable String refreshHandlerDescription;
+    private final byte[] serializedRefreshHandler;
 
     protected DefaultCatalogDynamicTable(
             Schema schema,
@@ -58,8 +62,11 @@ public class DefaultCatalogDynamicTable implements CatalogDynamicTable {
             @Nullable Long snapshot,
             String definitionQuery,
             Duration freshness,
-            @Nullable RefreshMode refreshMode,
-            RefreshHandler refreshJobHandler) {
+            LogicalRefreshMode logicalRefreshMode,
+            RefreshMode refreshMode,
+            RefreshStatus refreshStatus,
+            @Nullable String refreshHandlerDescription,
+            byte[] serializedRefreshHandler) {
         this.schema = checkNotNull(schema, "Schema must not be null.");
         this.comment = comment;
         this.partitionKeys = checkNotNull(partitionKeys, "Partition keys must not be null.");
@@ -67,8 +74,11 @@ public class DefaultCatalogDynamicTable implements CatalogDynamicTable {
         this.snapshot = snapshot;
         this.definitionQuery = definitionQuery;
         this.freshness = freshness;
+        this.logicalRefreshMode = logicalRefreshMode;
         this.refreshMode = refreshMode;
-        this.refreshJobHandler = refreshJobHandler;
+        this.refreshStatus = refreshStatus;
+        this.refreshHandlerDescription = refreshHandlerDescription;
+        this.serializedRefreshHandler = serializedRefreshHandler;
 
         checkArgument(
                 options.entrySet().stream()
@@ -111,8 +121,11 @@ public class DefaultCatalogDynamicTable implements CatalogDynamicTable {
                 snapshot,
                 definitionQuery,
                 freshness,
+                logicalRefreshMode,
                 refreshMode,
-                refreshJobHandler);
+                refreshStatus,
+                refreshHandlerDescription,
+                serializedRefreshHandler);
     }
 
     @Override
@@ -125,8 +138,11 @@ public class DefaultCatalogDynamicTable implements CatalogDynamicTable {
                 snapshot,
                 definitionQuery,
                 freshness,
+                logicalRefreshMode,
                 refreshMode,
-                refreshJobHandler);
+                refreshStatus,
+                refreshHandlerDescription,
+                serializedRefreshHandler);
     }
 
     @Override
@@ -157,7 +173,21 @@ public class DefaultCatalogDynamicTable implements CatalogDynamicTable {
 
     @Override
     public int hashCode() {
-        return Objects.hash(schema, comment, partitionKeys, options, snapshot);
+        int result =
+                Objects.hash(
+                        schema,
+                        comment,
+                        partitionKeys,
+                        options,
+                        snapshot,
+                        definitionQuery,
+                        freshness,
+                        logicalRefreshMode,
+                        refreshMode,
+                        refreshStatus,
+                        refreshHandlerDescription);
+        result = 31 * result + Arrays.hashCode(serializedRefreshHandler);
+        return result;
     }
 
     @Override
@@ -179,10 +209,17 @@ public class DefaultCatalogDynamicTable implements CatalogDynamicTable {
                 + '\''
                 + ", freshness="
                 + freshness
+                + ", logicalRefreshMode="
+                + logicalRefreshMode
                 + ", refreshMode="
                 + refreshMode
-                + ", refreshJobHandler="
-                + refreshJobHandler
+                + ", refreshStatus="
+                + refreshStatus
+                + ", refreshHandlerDescription='"
+                + refreshHandlerDescription
+                + '\''
+                + ", serializedRefreshHandler="
+                + Arrays.toString(serializedRefreshHandler)
                 + '}';
     }
 
@@ -202,12 +239,28 @@ public class DefaultCatalogDynamicTable implements CatalogDynamicTable {
     }
 
     @Override
-    public Optional<RefreshMode> getRefreshMode() {
-        return Optional.ofNullable(refreshMode);
+    public LogicalRefreshMode getLogicalRefreshMode() {
+        return logicalRefreshMode;
     }
 
     @Override
-    public RefreshHandler getRefreshJobHandler() {
-        return refreshJobHandler;
+    public RefreshMode getRefreshMode() {
+        return refreshMode;
+    }
+
+    @Override
+    public RefreshStatus getRefreshStatus() {
+        return refreshStatus;
+    }
+
+    @Override
+    public Optional<String> getRefreshHandlerDescription() {
+        return Optional.ofNullable(refreshHandlerDescription);
+    }
+
+    @Nullable
+    @Override
+    public byte[] getSerializedRefreshHandler() {
+        return serializedRefreshHandler;
     }
 }

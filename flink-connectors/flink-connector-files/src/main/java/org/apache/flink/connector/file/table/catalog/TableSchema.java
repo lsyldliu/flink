@@ -20,7 +20,6 @@ package org.apache.flink.connector.file.table.catalog;
 
 import org.apache.flink.table.catalog.CatalogBaseTable;
 import org.apache.flink.table.catalog.dynamic.CatalogDynamicTable;
-import org.apache.flink.table.catalog.dynamic.RefreshHandler;
 
 import javax.annotation.Nullable;
 
@@ -40,8 +39,11 @@ public class TableSchema implements Serializable {
     private final @Nullable String partitionColumns;
     private final String definitionQuery;
     private final Duration freshness;
-    private final @Nullable CatalogDynamicTable.RefreshMode refreshMode;
-    private final RefreshHandler refreshHandler;
+    private final CatalogDynamicTable.LogicalRefreshMode logicalRefreshMode;
+    private final CatalogDynamicTable.RefreshMode refreshMode;
+    private final CatalogDynamicTable.RefreshStatus refreshStatus;
+    private final @Nullable String refreshHandlerDescription;
+    private final byte[] serializedRefreshHandler;
 
     public TableSchema(
             CatalogBaseTable.TableKind tableKind,
@@ -53,8 +55,11 @@ public class TableSchema implements Serializable {
             String partitionColumns,
             String definitionQuery,
             Duration freshness,
+            CatalogDynamicTable.LogicalRefreshMode logicalRefreshMode,
             CatalogDynamicTable.RefreshMode refreshMode,
-            RefreshHandler refreshHandler) {
+            CatalogDynamicTable.RefreshStatus refreshStatus,
+            String refreshHandlerDescription,
+            byte[] serializedRefreshHandler) {
         this.tableKind = tableKind;
         this.schema = schema;
         this.comment = comment;
@@ -64,8 +69,11 @@ public class TableSchema implements Serializable {
         this.partitionColumns = partitionColumns;
         this.definitionQuery = definitionQuery;
         this.freshness = freshness;
+        this.logicalRefreshMode = logicalRefreshMode;
         this.refreshMode = refreshMode;
-        this.refreshHandler = refreshHandler;
+        this.refreshStatus = refreshStatus;
+        this.refreshHandlerDescription = refreshHandlerDescription;
+        this.serializedRefreshHandler = serializedRefreshHandler;
     }
 
     public String getSchema() {
@@ -108,7 +116,20 @@ public class TableSchema implements Serializable {
         return refreshMode;
     }
 
-    public RefreshHandler getRefreshHandler() {
-        return refreshHandler;
+    public CatalogDynamicTable.LogicalRefreshMode getLogicalRefreshMode() {
+        return logicalRefreshMode;
+    }
+
+    public CatalogDynamicTable.RefreshStatus getRefreshStatus() {
+        return refreshStatus;
+    }
+
+    @Nullable
+    public String getRefreshHandlerDescription() {
+        return refreshHandlerDescription;
+    }
+
+    public byte[] getSerializedRefreshHandler() {
+        return serializedRefreshHandler;
     }
 }

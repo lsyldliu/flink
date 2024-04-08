@@ -20,86 +20,24 @@ package org.apache.flink.table.catalog.dynamic;
 
 import org.apache.flink.annotation.PublicEvolving;
 
-import javax.annotation.Nullable;
-
-import java.util.Objects;
-
 /**
- * This interface represents the meta information of current dynamic table background refresh job.
- * The refresh mode of background job maybe continuous or full. The format of the meta information
- * in the two modes is not consistent, so we unify it by a structured json string jobDetail.
+ * This interface represents the meta information of current dynamic table background refresh
+ * pipeline. The refresh mode maybe continuous or full. The format of the meta information in the
+ * two modes is not consistent, so user need to implementation this interface according to .
  *
- * <p>In continuous mode, the format of the meta information is { "clusterType": "yarn",
+ * <p>This meta information will be serialized to bytes by {@link RefreshHandlerSerializer}, then
+ * store to Catalog for suspend or drop {@link CatalogDynamicTable}.
+ *
+ * <p>In continuous mode, the format of the meta information maybe { "clusterType": "yarn",
  * "clusterId": "xxx", "jobId": "yyyy" }.
  *
- * <p>In full mode, the meta information format is { "schedulerType": "airflow", "endpoint": "xxx",
- * "workflowId": "yyy" }.
+ * <p>In full mode, the meta information format maybe { "endpoint": "xxx", "workflowId": "yyy" }.
+ * Due to you may use different workflow scheduler plugin in this mode, you should implement this
+ * interface according to your plugin.
  */
 @PublicEvolving
-public class RefreshHandler {
+public interface RefreshHandler {
 
-    private final CatalogDynamicTable.RefreshMode actualRefreshMode;
-    private final State state;
-    private final @Nullable String detail;
-
-    public RefreshHandler(
-            CatalogDynamicTable.RefreshMode actualRefreshMode,
-            State state,
-            @Nullable String detail) {
-        this.actualRefreshMode = actualRefreshMode;
-        this.state = state;
-        this.detail = detail;
-    }
-
-    public CatalogDynamicTable.RefreshMode getActualRefreshMode() {
-        return actualRefreshMode;
-    }
-
-    public State getState() {
-        return state;
-    }
-
-    public String getDetail() {
-        return detail;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        RefreshHandler that = (RefreshHandler) o;
-        return actualRefreshMode == that.actualRefreshMode
-                && state == that.state
-                && Objects.equals(detail, that.detail);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(actualRefreshMode, state, detail);
-    }
-
-    @Override
-    public String toString() {
-        return "RefreshHandler{"
-                + "actualRefreshMode="
-                + actualRefreshMode
-                + ", state="
-                + state
-                + ", detail='"
-                + detail
-                + '\''
-                + '}';
-    }
-
-    /** Background refresh job state. */
-    @PublicEvolving
-    public enum State {
-        INITIALIZING,
-        ACTIVATED,
-        SUSPENDED
-    }
+    /** Returns a string that summarizes this refresh handler meta information. */
+    String asSummaryString();
 }

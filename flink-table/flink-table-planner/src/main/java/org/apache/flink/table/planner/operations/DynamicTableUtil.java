@@ -60,15 +60,40 @@ public class DynamicTableUtil {
         }
     }
 
-    public static CatalogDynamicTable.RefreshMode getRefreshMode(SqlRefreshMode sqlRefreshMode) {
+    public static CatalogDynamicTable.LogicalRefreshMode getLogicalRefreshMode(
+            SqlRefreshMode sqlRefreshMode) {
+        if (sqlRefreshMode == null) {
+            return CatalogDynamicTable.LogicalRefreshMode.AUTOMATIC;
+        }
+
         switch (sqlRefreshMode) {
             case FULL:
-                return CatalogDynamicTable.RefreshMode.FULL;
+                return CatalogDynamicTable.LogicalRefreshMode.FULL;
             case CONTINUOUS:
-                return CatalogDynamicTable.RefreshMode.CONTINUOUS;
+                return CatalogDynamicTable.LogicalRefreshMode.CONTINUOUS;
             default:
                 throw new ValidationException(
                         String.format("Unsupported refresh mode: %s.", sqlRefreshMode));
+        }
+    }
+
+    public static CatalogDynamicTable.RefreshMode deriveRefreshMode(
+            Duration threshold,
+            Duration specifiedFreshness,
+            CatalogDynamicTable.LogicalRefreshMode specifiedRefreshMode) {
+        // If the refresh mode is specified manually, so use it.
+        if (specifiedRefreshMode == CatalogDynamicTable.LogicalRefreshMode.FULL) {
+            return CatalogDynamicTable.RefreshMode.FULL;
+        }
+        if (specifiedRefreshMode == CatalogDynamicTable.LogicalRefreshMode.CONTINUOUS) {
+            return CatalogDynamicTable.RefreshMode.CONTINUOUS;
+        }
+
+        // derive the refresh mode via freshness
+        if (specifiedFreshness.compareTo(threshold) <= 0) {
+            return CatalogDynamicTable.RefreshMode.CONTINUOUS;
+        } else {
+            return CatalogDynamicTable.RefreshMode.FULL;
         }
     }
 }
