@@ -19,65 +19,49 @@
 package org.apache.flink.table.operations.ddl.dynamic;
 
 import org.apache.flink.annotation.Internal;
-import org.apache.flink.table.api.internal.TableResultImpl;
 import org.apache.flink.table.api.internal.TableResultInternal;
 import org.apache.flink.table.catalog.ObjectIdentifier;
-import org.apache.flink.table.catalog.dynamic.CatalogDynamicTable;
 import org.apache.flink.table.operations.Operation;
 import org.apache.flink.table.operations.OperationUtils;
-import org.apache.flink.table.operations.QueryOperation;
-import org.apache.flink.table.operations.ddl.CreateOperation;
+import org.apache.flink.table.operations.ddl.DropOperation;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Operation to describe a CREATE DYNAMIC TABLE statement. */
+/** Operation to describe a DROP DYNAMIC TABLE ... statement. */
 @Internal
-public class CreateDynamicTableOperation implements CreateOperation, DynamicTableOperation {
+public class DropDynamicTableOperation implements DropOperation, DynamicTableOperation {
 
     private final ObjectIdentifier tableIdentifier;
-    private final CatalogDynamicTable dynamicTable;
-    private final QueryOperation queryOperation;
+    private final boolean ifExists;
 
-    public CreateDynamicTableOperation(
-            ObjectIdentifier tableIdentifier,
-            CatalogDynamicTable dynamicTable,
-            QueryOperation queryOperation) {
+    public DropDynamicTableOperation(ObjectIdentifier tableIdentifier, boolean ifExists) {
         this.tableIdentifier = tableIdentifier;
-        this.dynamicTable = dynamicTable;
-        this.queryOperation = queryOperation;
-    }
-
-    @Override
-    public TableResultInternal execute(Context ctx) {
-        // create dynamic table in catalog
-        ctx.getCatalogManager().createTable(dynamicTable, tableIdentifier, false);
-        return TableResultImpl.TABLE_RESULT_OK;
+        this.ifExists = ifExists;
     }
 
     public ObjectIdentifier getTableIdentifier() {
         return tableIdentifier;
     }
 
-    public CatalogDynamicTable getCatalogDynamicTable() {
-        return dynamicTable;
+    public boolean isIfExists() {
+        return ifExists;
     }
 
-    public CatalogDynamicTable getDynamicTable() {
-        return dynamicTable;
+    @Override
+    public TableResultInternal execute(Context ctx) {
+        ctx.getCatalogManager().dropTable(getTableIdentifier(), isIfExists());
+        return TableResultInternal.TABLE_RESULT_OK;
     }
 
     @Override
     public String asSummaryString() {
         Map<String, Object> params = new LinkedHashMap<>();
-        params.put("dynamicTable", dynamicTable);
         params.put("identifier", tableIdentifier);
+        params.put("IfExists", ifExists);
 
         return OperationUtils.formatWithChildren(
-                "CREATE DYNAMIC TABLE",
-                params,
-                Collections.singletonList(queryOperation),
-                Operation::asSummaryString);
+                "DROP DYNAMIC TABLE", params, Collections.emptyList(), Operation::asSummaryString);
     }
 }

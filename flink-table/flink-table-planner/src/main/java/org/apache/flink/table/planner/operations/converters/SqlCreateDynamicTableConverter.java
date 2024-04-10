@@ -104,13 +104,13 @@ public class SqlCreateDynamicTableConverter implements SqlNodeConverter<SqlCreat
                 context.expandSqlIdentifiers(
                         context.toQuotedSqlString(sqlCreateDynamicTable.getAsQuery()));
 
-        QueryOperation operation =
+        QueryOperation queryOperation =
                 new PlannerQueryOperation(
                         context.toRelRoot(validateQuery).project(),
                         () -> context.toQuotedSqlString(validateQuery));
 
         Schema.Builder builder =
-                Schema.newBuilder().fromResolvedSchema(operation.getResolvedSchema());
+                Schema.newBuilder().fromResolvedSchema(queryOperation.getResolvedSchema());
         // get primary key
         // TODO: validate primary key fields nullability
         Optional<SqlTableConstraint> sqlTableConstraint =
@@ -144,6 +144,6 @@ public class SqlCreateDynamicTableConverter implements SqlNodeConverter<SqlCreat
                         null,
                         new byte[0]);
 
-        return new CreateDynamicTableOperation(identifier, dynamicTable);
+        return new CreateDynamicTableOperation(identifier, dynamicTable, queryOperation);
     }
 }
