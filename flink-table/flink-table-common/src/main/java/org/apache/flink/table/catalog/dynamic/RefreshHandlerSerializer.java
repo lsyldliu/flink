@@ -26,7 +26,9 @@ import java.io.IOException;
 @PublicEvolving
 public interface RefreshHandlerSerializer<T extends RefreshHandler> {
 
+    /** Serialize the {@link RefreshHandler} to bytes. */
     byte[] serialize(T refreshHandler) throws IOException;
 
+    /** Deserialize the bytes to a {@link RefreshHandler} instance. */
     T deserialize(byte[] serializedBytes) throws IOException;
 }

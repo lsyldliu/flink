@@ -38,6 +38,9 @@ import org.apache.flink.annotation.PublicEvolving;
 @PublicEvolving
 public interface RefreshHandler {
 
-    /** Returns a string that summarizes this refresh handler meta information. */
+    /**
+     * Returns a string that summarizes this refresh handler meta information for printing to a
+     * console or log.
+     */
     String asSummaryString();
 }
