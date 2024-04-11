@@ -28,7 +28,6 @@ import org.apache.flink.client.deployment.DefaultClusterClientServiceLoader;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -46,6 +45,7 @@ import org.apache.flink.table.api.internal.TableResultInternal;
 import org.apache.flink.table.catalog.CatalogBaseTable.TableKind;
 import org.apache.flink.table.catalog.CatalogManager;
 import org.apache.flink.table.catalog.Column;
+import org.apache.flink.table.catalog.ContextResolvedTable;
 import org.apache.flink.table.catalog.FunctionCatalog;
 import org.apache.flink.table.catalog.ObjectIdentifier;
 import org.apache.flink.table.catalog.ResolvedCatalogBaseTable;
@@ -84,6 +84,7 @@ import org.apache.flink.table.operations.ModifyOperation;
 import org.apache.flink.table.operations.Operation;
 import org.apache.flink.table.operations.QueryOperation;
 import org.apache.flink.table.operations.ShowFunctionsOperation;
+import org.apache.flink.table.operations.SinkModifyOperation;
 import org.apache.flink.table.operations.StatementSetOperation;
 import org.apache.flink.table.operations.UnloadModuleOperation;
 import org.apache.flink.table.operations.UseOperation;
@@ -101,6 +102,9 @@ import org.apache.flink.table.operations.ddl.CreateOperation;
 import org.apache.flink.table.operations.ddl.CreateTempSystemFunctionOperation;
 import org.apache.flink.table.operations.ddl.DropOperation;
 import org.apache.flink.table.operations.ddl.dynamic.AlterDynamicTableChangeOperation;
+import org.apache.flink.table.operations.ddl.dynamic.AlterDynamicTableRefreshOperation;
+import org.apache.flink.table.operations.ddl.dynamic.AlterDynamicTableResumeOperation;
+import org.apache.flink.table.operations.ddl.dynamic.AlterDynamicTableSuspendOperation;
 import org.apache.flink.table.operations.ddl.dynamic.CreateDynamicTableOperation;
 import org.apache.flink.table.operations.ddl.dynamic.DynamicTableOperation;
 import org.apache.flink.table.resource.ResourceManager;
@@ -128,7 +132,9 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.api.common.RuntimeExecutionMode.BATCH;
 import static org.apache.flink.api.common.RuntimeExecutionMode.STREAMING;
+import static org.apache.flink.configuration.DeploymentOptions.TARGET;
 import static org.apache.flink.configuration.ExecutionOptions.RUNTIME_MODE;
 import static org.apache.flink.configuration.PipelineOptions.NAME;
 import static org.apache.flink.table.api.internal.TableResultInternal.TABLE_RESULT_OK;
@@ -850,88 +856,250 @@ public class OperationExecutor {
             Operation op,
             String statement) {
         if (op instanceof CreateDynamicTableOperation) {
-            // Create Dynamic Table in catalog first.
-            tableEnv.executeInternal(op);
-            // Create background refresh job
-            CreateDynamicTableOperation dynamicTableOperation = (CreateDynamicTableOperation) op;
-            CatalogDynamicTable catalogDynamicTable =
-                    dynamicTableOperation.getCatalogDynamicTable();
-
-            CatalogDynamicTable.RefreshMode refreshMode = catalogDynamicTable.getRefreshMode();
-            if (refreshMode == CatalogDynamicTable.RefreshMode.CONTINUOUS) {
-                // Set pipeline name
-                String jobName =
-                        String.format(
-                                "Dynamic_table_%s_refresh_job",
-                                dynamicTableOperation.getTableIdentifier());
-                executionConfig.set(NAME, jobName);
-                // Set execution mode in executionConfig, which is only work for this execution
-                executionConfig.set(RUNTIME_MODE, STREAMING);
-                // TODO Set checkpoint & minibatch related options.
-                // Generate insert into statement
-                String insertStatement =
-                        String.format(
-                                "INSERT INTO %s %s",
-                                dynamicTableOperation.getTableIdentifier(),
-                                catalogDynamicTable.getDefinitionQuery());
-                // submit streaming job
-                ResultFetcher resultFetcher = executeStatement(handle, insertStatement);
-                // get job info
-                // execution.target: remote
-                // clusterId: yarn.application.id/kubernetes.cluster-id/NONE
-                // jobId
-                List<RowData> results = fetchAllResults(resultFetcher);
-                String clusterId = results.get(0).getString(0).toString();
-                String jobId = results.get(0).getString(1).toString();
-                String executeTarget =
-                        sessionContext.getSessionConf().get(DeploymentOptions.TARGET);
-                ContinuousRefreshHandler continuousRefreshHandler =
-                        new ContinuousRefreshHandler(executeTarget, clusterId, jobId);
-                byte[] serializedBytes;
-                try {
-                    serializedBytes =
-                            ContinuousRefreshHandlerSerializer.INSTANCE.serialize(
-                                    continuousRefreshHandler);
-                    ContinuousRefreshHandler handler =
-                            ContinuousRefreshHandlerSerializer.INSTANCE.deserialize(
-                                    serializedBytes);
-                    System.out.println();
-                } catch (IOException e) {
-                    throw new TableException(
-                            "Serialize ContinuousRefreshHandler occur exception.", e);
-                }
-
-                // update RefreshHandler to Catalog
-                CatalogDynamicTable updatedDynamicTable =
-                        CatalogDynamicTable.of(
-                                catalogDynamicTable.getUnresolvedSchema(),
-                                catalogDynamicTable.getComment(),
-                                catalogDynamicTable.getPartitionKeys(),
-                                catalogDynamicTable.getOptions(),
-                                catalogDynamicTable.getSnapshot().isPresent()
-                                        ? catalogDynamicTable.getSnapshot().get()
-                                        : null,
-                                catalogDynamicTable.getDefinitionQuery(),
-                                catalogDynamicTable.getFreshness(),
-                                catalogDynamicTable.getLogicalRefreshMode(),
-                                catalogDynamicTable.getRefreshMode(),
-                                CatalogDynamicTable.RefreshStatus.ACTIVATED,
-                                continuousRefreshHandler.asSummaryString(),
-                                serializedBytes);
-                AlterDynamicTableChangeOperation alterDynamicTableChangeOperation =
-                        new AlterDynamicTableChangeOperation(
-                                dynamicTableOperation.getTableIdentifier(),
-                                Collections.emptyList(),
-                                updatedDynamicTable);
-                callExecutableOperation(handle, alterDynamicTableChangeOperation);
-                // return streaming job info
-                return resultFetcher;
-            } else {
-
-            }
+            return executeCreateDynamicOperation(
+                    tableEnv, handle, (CreateDynamicTableOperation) op);
+        } else if (op instanceof AlterDynamicTableRefreshOperation) {
+            return executeDynamicTableRefreshOperation(
+                    handle, (AlterDynamicTableRefreshOperation) op, statement);
+        } else if (op instanceof AlterDynamicTableSuspendOperation) {
+            return executeDynamicTableSuspendOperation(
+                    tableEnv, handle, (AlterDynamicTableSuspendOperation) op);
+        } else if (op instanceof AlterDynamicTableResumeOperation) {
+            return executeDynamicTableResumeOperation(
+                    tableEnv, handle, (AlterDynamicTableResumeOperation) op);
         }
 
-        return null;
+        throw new SqlExecutionException(
+                String.format("Unsupported Operation %s for dynamic table.", op.asSummaryString()));
+    }
+
+    private ResultFetcher executeCreateDynamicOperation(
+            TableEnvironmentInternal tableEnv,
+            OperationHandle handle,
+            CreateDynamicTableOperation createDynamicTableOperation) {
+        // Create Dynamic Table in catalog first.
+        tableEnv.executeInternal(createDynamicTableOperation);
+        // Create background refresh job
+        CatalogDynamicTable catalogDynamicTable =
+                createDynamicTableOperation.getCatalogDynamicTable();
+
+        CatalogDynamicTable.RefreshMode refreshMode = catalogDynamicTable.getRefreshMode();
+        if (refreshMode == CatalogDynamicTable.RefreshMode.CONTINUOUS) {
+            return executeDynamicTableContinuousMode(
+                    createDynamicTableOperation.getTableIdentifier(), catalogDynamicTable, handle);
+        } else {
+            throw new SqlExecutionException(
+                    "Current doesn't support FULL REFRESH mode of dynamic table.");
+        }
+    }
+
+    private ResultFetcher executeDynamicTableContinuousMode(
+            ObjectIdentifier dynamicTableIdentifier,
+            CatalogDynamicTable catalogDynamicTable,
+            OperationHandle handle) {
+        // Set pipeline name
+        String jobName = String.format("Dynamic_table_%s_refresh_job", dynamicTableIdentifier);
+        executionConfig.set(NAME, jobName);
+        // Set execution mode in executionConfig, which is only work for this execution
+        executionConfig.set(RUNTIME_MODE, STREAMING);
+        // TODO Set checkpoint & minibatch related options.
+        // Generate insert into statement
+        String insertStatement =
+                String.format(
+                        "INSERT INTO %s %s",
+                        dynamicTableIdentifier, catalogDynamicTable.getDefinitionQuery());
+        // submit streaming job
+        ResultFetcher resultFetcher = executeStatement(handle, insertStatement);
+        // get job info
+        // execution.target: remote
+        // clusterId: yarn.application.id/kubernetes.cluster-id/NONE
+        // jobId
+        List<RowData> results = fetchAllResults(resultFetcher);
+        String clusterId = results.get(0).getString(0).toString();
+        String jobId = results.get(0).getString(1).toString();
+        String executeTarget = sessionContext.getSessionConf().get(TARGET);
+        ContinuousRefreshHandler continuousRefreshHandler =
+                new ContinuousRefreshHandler(executeTarget, clusterId, jobId);
+        byte[] serializedBytes;
+        try {
+            serializedBytes =
+                    ContinuousRefreshHandlerSerializer.INSTANCE.serialize(continuousRefreshHandler);
+        } catch (IOException e) {
+            throw new TableException("Serialize ContinuousRefreshHandler occur exception.", e);
+        }
+
+        // update RefreshHandler to Catalog
+        CatalogDynamicTable updatedDynamicTable =
+                CatalogDynamicTable.of(
+                        catalogDynamicTable.getUnresolvedSchema(),
+                        catalogDynamicTable.getComment(),
+                        catalogDynamicTable.getPartitionKeys(),
+                        catalogDynamicTable.getOptions(),
+                        catalogDynamicTable.getSnapshot().isPresent()
+                                ? catalogDynamicTable.getSnapshot().get()
+                                : null,
+                        catalogDynamicTable.getDefinitionQuery(),
+                        catalogDynamicTable.getFreshness(),
+                        catalogDynamicTable.getLogicalRefreshMode(),
+                        catalogDynamicTable.getRefreshMode(),
+                        CatalogDynamicTable.RefreshStatus.ACTIVATED,
+                        continuousRefreshHandler.asSummaryString(),
+                        serializedBytes);
+        AlterDynamicTableChangeOperation alterDynamicTableChangeOperation =
+                new AlterDynamicTableChangeOperation(
+                        dynamicTableIdentifier, Collections.emptyList(), updatedDynamicTable);
+        callExecutableOperation(handle, alterDynamicTableChangeOperation);
+        // return streaming job info
+        return resultFetcher;
+    }
+
+    private ResultFetcher executeDynamicTableSuspendOperation(
+            TableEnvironmentInternal tableEnv,
+            OperationHandle handle,
+            AlterDynamicTableSuspendOperation dynamicTableSuspendOperation) {
+        ObjectIdentifier objectIdentifier = dynamicTableSuspendOperation.getTableIdentifier();
+        ContextResolvedTable contextResolvedTable =
+                sessionContext.getSessionState().catalogManager.getTableOrError(objectIdentifier);
+        TableKind tableKind = contextResolvedTable.getResolvedTable().getTableKind();
+        if (tableKind != TableKind.DYNAMIC_TABLE) {
+            throw new TableException(
+                    String.format(
+                            "Table %s is not a dynamic table, doesn't support suspend operation.",
+                            objectIdentifier));
+        }
+        CatalogDynamicTable catalogDynamicTable =
+                (CatalogDynamicTable) contextResolvedTable.getResolvedTable().getOrigin();
+
+        CatalogDynamicTable.RefreshMode refreshMode = catalogDynamicTable.getRefreshMode();
+        byte[] serializedRefreshHandler = catalogDynamicTable.getSerializedRefreshHandler();
+        if (refreshMode == CatalogDynamicTable.RefreshMode.CONTINUOUS) {
+            ContinuousRefreshHandler continuousRefreshHandler;
+            try {
+                continuousRefreshHandler =
+                        ContinuousRefreshHandlerSerializer.INSTANCE.deserialize(
+                                serializedRefreshHandler);
+            } catch (IOException e) {
+                throw new SqlExecutionException(
+                        String.format(
+                                "Deserialize ContinuousRefreshHandler for dynamic table %s occur exception.",
+                                e));
+            }
+            if (continuousRefreshHandler == null) {
+                throw new SqlExecutionException(
+                        String.format(
+                                "ContinuousRefreshHandler for dynamic table %s is null when execute suspend operation."));
+            }
+
+            // set cluster info
+            setClusterInfo(
+                    continuousRefreshHandler.getExecutionTarget(),
+                    continuousRefreshHandler.getClusterId());
+            String jobID = continuousRefreshHandler.getJobId();
+            ResultFetcher resultFetcher =
+                    callStopJobOperation(
+                            tableEnv, handle, new StopJobOperation(jobID, false, false));
+
+            // update refresh status
+            CatalogDynamicTable updatedDynamicTable =
+                    CatalogDynamicTable.of(
+                            catalogDynamicTable.getUnresolvedSchema(),
+                            catalogDynamicTable.getComment(),
+                            catalogDynamicTable.getPartitionKeys(),
+                            catalogDynamicTable.getOptions(),
+                            catalogDynamicTable.getSnapshot().isPresent()
+                                    ? catalogDynamicTable.getSnapshot().get()
+                                    : null,
+                            catalogDynamicTable.getDefinitionQuery(),
+                            catalogDynamicTable.getFreshness(),
+                            catalogDynamicTable.getLogicalRefreshMode(),
+                            catalogDynamicTable.getRefreshMode(),
+                            CatalogDynamicTable.RefreshStatus.SUSPENDED,
+                            continuousRefreshHandler.asSummaryString(),
+                            serializedRefreshHandler);
+            AlterDynamicTableChangeOperation alterDynamicTableChangeOperation =
+                    new AlterDynamicTableChangeOperation(
+                            objectIdentifier, Collections.emptyList(), updatedDynamicTable);
+            callExecutableOperation(handle, alterDynamicTableChangeOperation);
+            return resultFetcher;
+        } else {
+            // TODO suspend workflow scheduler
+            throw new SqlExecutionException(
+                    "FULL REFRESH mode doesn't support suspend operation currently.");
+        }
+    }
+
+    private ResultFetcher executeDynamicTableResumeOperation(
+            TableEnvironmentInternal tableEnv,
+            OperationHandle handle,
+            AlterDynamicTableResumeOperation dynamicTableResumeOperation) {
+        ObjectIdentifier objectIdentifier = dynamicTableResumeOperation.getTableIdentifier();
+        ContextResolvedTable contextResolvedTable =
+                sessionContext.getSessionState().catalogManager.getTableOrError(objectIdentifier);
+        TableKind tableKind = contextResolvedTable.getResolvedTable().getTableKind();
+        if (tableKind != TableKind.DYNAMIC_TABLE) {
+            throw new TableException(
+                    String.format(
+                            "Table %s is not a dynamic table, doesn't support resume operation.",
+                            objectIdentifier));
+        }
+        CatalogDynamicTable catalogDynamicTable =
+                (CatalogDynamicTable) contextResolvedTable.getResolvedTable().getOrigin();
+
+        CatalogDynamicTable.RefreshMode refreshMode = catalogDynamicTable.getRefreshMode();
+        if (CatalogDynamicTable.RefreshMode.CONTINUOUS == refreshMode) {
+            return executeDynamicTableContinuousMode(objectIdentifier, catalogDynamicTable, handle);
+        } else {
+            // TODO suspend workflow scheduler
+            throw new SqlExecutionException(
+                    "FULL REFRESH mode doesn't support resume operation currently.");
+        }
+    }
+
+    private ResultFetcher executeDynamicTableRefreshOperation(
+            OperationHandle handle,
+            AlterDynamicTableRefreshOperation alterDynamicTableRefreshOperation,
+            String statement) {
+        ObjectIdentifier objectIdentifier = alterDynamicTableRefreshOperation.getTableIdentifier();
+        Map<String, String> staticPartitions =
+                alterDynamicTableRefreshOperation.getStaticPartitions();
+
+        ContextResolvedTable contextResolvedTable =
+                sessionContext.getSessionState().catalogManager.getTableOrError(objectIdentifier);
+        TableKind tableKind = contextResolvedTable.getResolvedTable().getTableKind();
+        if (tableKind != TableKind.DYNAMIC_TABLE) {
+            throw new TableException(
+                    String.format(
+                            "Table %s is not a dynamic table, doesn't support refresh operation.",
+                            objectIdentifier));
+        }
+
+        CatalogDynamicTable catalogDynamicTable =
+                (CatalogDynamicTable) contextResolvedTable.getResolvedTable().getOrigin();
+        String definitionQuery = catalogDynamicTable.getDefinitionQuery();
+
+        String jobName = String.format("Dynamic_table_%s_refresh_operation", objectIdentifier);
+        executionConfig.set(NAME, jobName);
+        // Set execution mode to batch, which is only work for this execution
+        executionConfig.set(RUNTIME_MODE, BATCH);
+        TableEnvironmentInternal batchTableEnv = getTableEnvironment();
+
+        List<Operation> operations = batchTableEnv.getParser().parse(definitionQuery);
+        // This must be QueryOperation
+        Preconditions.checkArgument(
+                operations.get(0) instanceof QueryOperation, "only query operation supported");
+        QueryOperation queryOperation = (QueryOperation) operations.get(0);
+        SinkModifyOperation sinkModifyOperation =
+                new SinkModifyOperation(
+                        contextResolvedTable.convertDynamicTable(),
+                        queryOperation,
+                        staticPartitions,
+                        null,
+                        true,
+                        Collections.emptyMap());
+
+        // execute SinkModifyOperation
+        return callModifyOperations(
+                batchTableEnv, handle, Collections.singletonList(sinkModifyOperation));
     }
 
     private List<RowData> fetchAllResults(ResultFetcher resultFetcher) {
@@ -943,5 +1111,20 @@ public class OperationExecutor {
             token = result.getNextToken();
         }
         return results;
+    }
+
+    private void setClusterInfo(String executionTarget, String clusterId) {
+        sessionContext.set(TARGET.key(), executionTarget);
+        switch (executionTarget) {
+            case "yarn-session":
+            case "yarn-application":
+            case "yarn-per-job":
+                sessionContext.set("yarn.application.id", clusterId);
+            case "kubernetes-session":
+            case "kubernetes-application":
+                sessionContext.set("kubernetes.cluster-id", clusterId);
+            default:
+                // Other target doesn't need set clusterId
+        }
     }
 }
