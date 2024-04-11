@@ -19,14 +19,14 @@
 package org.apache.flink.table.workflow.dolphinscheduler;
 
 import org.apache.flink.table.catalog.ObjectIdentifier;
-import org.apache.flink.table.catalog.dynamic.RefreshHandler;
 import org.apache.flink.table.catalog.dynamic.RefreshHandlerSerializer;
 import org.apache.flink.table.workflow.WorkflowScheduler;
 
 import java.util.Map;
 
 /** DolphinScheduler workflow scheduler implementation. */
-public class DolphinSchedulerWorkflowScheduler implements WorkflowScheduler {
+public class DolphinSchedulerWorkflowScheduler
+        implements WorkflowScheduler<DolphinSchedulerRefreshHandler> {
 
     private final String userName;
     private final String password;
@@ -47,30 +47,32 @@ public class DolphinSchedulerWorkflowScheduler implements WorkflowScheduler {
     }
 
     @Override
-    public RefreshHandler createRefreshWorkflow(
+    public DolphinSchedulerRefreshHandler createRefreshWorkflow(
             ObjectIdentifier dynamicTableIdentifier,
             String refreshStatement,
             String workflowNamePrefix,
             String refreshCron,
             boolean isPeriodic,
             String triggerUrl,
+            Map<String, String> staticPartitions,
             Map<String, String> executionConf) {
         return null;
     }
 
     @Override
-    public boolean suspendRefreshWorkflow(RefreshHandler refreshHandler) {
+    public boolean suspendRefreshWorkflow(DolphinSchedulerRefreshHandler refreshHandler) {
         return false;
     }
 
     @Override
     public boolean resumeRefreshWorkflow(
-            RefreshHandler refreshHandler, Map<String, String> updatedExecutionConf) {
+            DolphinSchedulerRefreshHandler refreshHandler,
+            Map<String, String> updatedExecutionConf) {
         return false;
     }
 
     @Override
-    public boolean deleteRefreshWorkflow(RefreshHandler refreshHandler) {
+    public boolean deleteRefreshWorkflow(DolphinSchedulerRefreshHandler refreshHandler) {
         return false;
     }
 }

@@ -32,7 +32,7 @@ import java.util.Map;
  * dynamic table.
  */
 @PublicEvolving
-public interface WorkflowScheduler {
+public interface WorkflowScheduler<T extends RefreshHandler> {
 
     /**
      * Create a {@link RefreshHandlerSerializer} to serialize and deserialize {@link
@@ -49,13 +49,14 @@ public interface WorkflowScheduler {
      * @param executionConf The flink job execution conf.
      * @return The detail refresh workflow information.
      */
-    RefreshHandler createRefreshWorkflow(
+    T createRefreshWorkflow(
             ObjectIdentifier dynamicTableIdentifier,
             String refreshStatement,
             String workflowNamePrefix,
             @Nullable String refreshCron,
             boolean isPeriodic,
             String triggerUrl,
+            Map<String, String> staticPartitions,
             Map<String, String> executionConf);
 
     /**
@@ -63,7 +64,7 @@ public interface WorkflowScheduler {
      *
      * @param refreshHandler The detail refresh workflow information.
      */
-    boolean suspendRefreshWorkflow(RefreshHandler refreshHandler);
+    boolean suspendRefreshWorkflow(T refreshHandler);
 
     /**
      * Resume the refresh workflow in scheduler with new execution conf.
@@ -71,13 +72,12 @@ public interface WorkflowScheduler {
      * @param refreshHandler The detail refresh workflow information
      * @param updatedExecutionConf The updated flink job execution conf.
      */
-    boolean resumeRefreshWorkflow(
-            RefreshHandler refreshHandler, Map<String, String> updatedExecutionConf);
+    boolean resumeRefreshWorkflow(T refreshHandler, Map<String, String> updatedExecutionConf);
 
     /**
      * Delete the refresh workflow in scheduler.
      *
      * @param refreshHandler The detail refresh workflow information.
      */
-    boolean deleteRefreshWorkflow(RefreshHandler refreshHandler);
+    boolean deleteRefreshWorkflow(T refreshHandler);
 }

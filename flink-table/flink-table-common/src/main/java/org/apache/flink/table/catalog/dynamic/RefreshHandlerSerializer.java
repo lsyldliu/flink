@@ -29,6 +29,9 @@ public interface RefreshHandlerSerializer<T extends RefreshHandler> {
     /** Serialize the {@link RefreshHandler} to bytes. */
     byte[] serialize(T refreshHandler) throws IOException;
 
-    /** Deserialize the bytes to a {@link RefreshHandler} instance. */
+    /**
+     * Deserialize the bytes to a {@link RefreshHandler} instance. A {@link ClassLoader} maybe need
+     * for user jar.
+     */
     T deserialize(byte[] serializedBytes) throws IOException;
 }

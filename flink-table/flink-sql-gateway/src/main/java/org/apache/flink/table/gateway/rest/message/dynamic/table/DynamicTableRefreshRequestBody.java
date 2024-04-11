@@ -35,8 +35,9 @@ public class DynamicTableRefreshRequestBody implements RequestBody {
     private static final String FIELD_NAME_DYNAMIC_TABLE = "dynamicTable";
     private static final String FIELD_NAME_REFRESH_STATEMENT = "refreshStatement";
     private static final String FIELD_NAME_IS_PERIODIC = "isPeriodic";
-    private static final String FIELD_NAME_SCHEDULER_TIME = "schedulerTime";
-    private static final String FIELD_NAME_SCHEDULER_TIME_FORMAT = "schedulerTimeFormat";
+    private static final String FIELD_NAME_SCHEDULE_TIME = "scheduleTime";
+    private static final String FIELD_NAME_SCHEDULE_TIME_FORMAT = "scheduleTimeFormat";
+    private static final String FIELD_NAME_STATIC_PARTITIONS = "staticPartitions";
     private static final String FIELD_NAME_EXECUTION_CONFIG = "executionConfig";
 
     @JsonProperty(FIELD_NAME_DYNAMIC_TABLE)
@@ -48,13 +49,16 @@ public class DynamicTableRefreshRequestBody implements RequestBody {
     @JsonProperty(FIELD_NAME_IS_PERIODIC)
     private final boolean isPeriodic;
 
-    @JsonProperty(FIELD_NAME_SCHEDULER_TIME)
+    @JsonProperty(FIELD_NAME_SCHEDULE_TIME)
     @Nullable
-    private final String schedulerTime;
+    private final String scheduleTime;
 
-    @JsonProperty(FIELD_NAME_SCHEDULER_TIME_FORMAT)
+    @JsonProperty(FIELD_NAME_SCHEDULE_TIME_FORMAT)
     @Nullable
-    private final String schedulerTimeFormat;
+    private final String scheduleTimeFormat;
+
+    @JsonProperty(FIELD_NAME_STATIC_PARTITIONS)
+    private final Map<String, String> staticPartitions;
 
     @JsonProperty(FIELD_NAME_EXECUTION_CONFIG)
     @Nullable
@@ -65,15 +69,18 @@ public class DynamicTableRefreshRequestBody implements RequestBody {
             @JsonProperty(FIELD_NAME_DYNAMIC_TABLE) String dynamicTable,
             @JsonProperty(FIELD_NAME_REFRESH_STATEMENT) String refreshStatement,
             @JsonProperty(FIELD_NAME_IS_PERIODIC) boolean isPeriodic,
-            @JsonProperty(FIELD_NAME_SCHEDULER_TIME) @Nullable String schedulerTime,
-            @JsonProperty(FIELD_NAME_SCHEDULER_TIME_FORMAT) @Nullable String schedulerTimeFormat,
+            @JsonProperty(FIELD_NAME_SCHEDULE_TIME) @Nullable String scheduleTime,
+            @JsonProperty(FIELD_NAME_SCHEDULE_TIME_FORMAT) @Nullable String scheduleTimeFormat,
+            @JsonProperty(FIELD_NAME_STATIC_PARTITIONS) @Nullable
+                    Map<String, String> staticPartitions,
             @JsonProperty(FIELD_NAME_EXECUTION_CONFIG) @Nullable
                     Map<String, String> executionConfig) {
         this.dynamicTable = dynamicTable;
         this.refreshStatement = refreshStatement;
         this.isPeriodic = isPeriodic;
-        this.schedulerTime = schedulerTime;
-        this.schedulerTimeFormat = schedulerTimeFormat;
+        this.scheduleTime = scheduleTime;
+        this.scheduleTimeFormat = scheduleTimeFormat;
+        this.staticPartitions = staticPartitions;
         this.executionConfig = executionConfig;
     }
 
@@ -90,13 +97,22 @@ public class DynamicTableRefreshRequestBody implements RequestBody {
     }
 
     @Nullable
-    public String getSchedulerTime() {
-        return schedulerTime;
+    public String getScheduleTime() {
+        return scheduleTime;
     }
 
     @Nullable
     public String getSchedulerTimeFormat() {
-        return schedulerTimeFormat;
+        return scheduleTimeFormat;
+    }
+
+    @Nullable
+    public String getScheduleTimeFormat() {
+        return scheduleTimeFormat;
+    }
+
+    public Map<String, String> getStaticPartitions() {
+        return staticPartitions;
     }
 
     @Nullable
