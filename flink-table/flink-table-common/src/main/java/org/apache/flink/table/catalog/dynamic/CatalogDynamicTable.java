@@ -176,6 +176,16 @@ public interface CatalogDynamicTable extends CatalogBaseTable {
     @Nullable
     byte[] getSerializedRefreshHandler();
 
+    /**
+     * Returns a copy of this {@code CatalogDynamicTable} with given refresh info.
+     *
+     * @return a new copy of this table with replaced refresh info
+     */
+    CatalogDynamicTable copy(
+            RefreshStatus refreshStatus,
+            String refreshHandlerDescription,
+            byte[] serializedRefreshHandler);
+
     /** The logical refresh mode of dynamic table. */
     @PublicEvolving
     enum LogicalRefreshMode {

@@ -148,6 +148,16 @@ public class ResolvedCatalogDynamicTable
         return origin.getSerializedRefreshHandler();
     }
 
+    @Override
+    public CatalogDynamicTable copy(
+            RefreshStatus refreshStatus,
+            String refreshHandlerDescription,
+            byte[] serializedRefreshHandler) {
+        return new ResolvedCatalogDynamicTable(
+                origin.copy(refreshStatus, refreshHandlerDescription, serializedRefreshHandler),
+                resolvedSchema);
+    }
+
     /** Convert ResolvedCatalogDynamicTable to a ResolvedCatalogTable. */
     public ResolvedCatalogTable toResolvedCatalogTable() {
         return new ResolvedCatalogTable(

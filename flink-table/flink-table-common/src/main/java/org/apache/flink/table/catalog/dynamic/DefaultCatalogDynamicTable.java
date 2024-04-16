@@ -263,4 +263,24 @@ public class DefaultCatalogDynamicTable implements CatalogDynamicTable {
     public byte[] getSerializedRefreshHandler() {
         return serializedRefreshHandler;
     }
+
+    @Override
+    public CatalogDynamicTable copy(
+            RefreshStatus refreshStatus,
+            String refreshHandlerDescription,
+            byte[] serializedRefreshHandler) {
+        return new DefaultCatalogDynamicTable(
+                schema,
+                comment,
+                partitionKeys,
+                options,
+                snapshot,
+                definitionQuery,
+                freshness,
+                logicalRefreshMode,
+                refreshMode,
+                refreshStatus,
+                refreshHandlerDescription,
+                serializedRefreshHandler);
+    }
 }
