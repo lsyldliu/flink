@@ -31,7 +31,7 @@ public class InMemoryRefreshHandler implements RefreshHandler, Serializable {
     private final ObjectIdentifier dynamicTableIdentifier;
     private final String descriptionStatement;
     private final String workflowName;
-    private final String schedulerInterval;
+    private final long schedulerInterval;
     private final boolean isPeriodic;
     private final Map<String, String> staticPartitions;
     private final Map<String, String> executionConfig;
@@ -40,7 +40,7 @@ public class InMemoryRefreshHandler implements RefreshHandler, Serializable {
             ObjectIdentifier dynamicTableIdentifier,
             String descriptionStatement,
             String workflowName,
-            String schedulerInterval,
+            long schedulerInterval,
             boolean isPeriodic,
             Map<String, String> staticPartitions,
             Map<String, String> executionConfig) {
@@ -65,7 +65,7 @@ public class InMemoryRefreshHandler implements RefreshHandler, Serializable {
         return workflowName;
     }
 
-    public String getSchedulerInterval() {
+    public long getSchedulerInterval() {
         return schedulerInterval;
     }
 

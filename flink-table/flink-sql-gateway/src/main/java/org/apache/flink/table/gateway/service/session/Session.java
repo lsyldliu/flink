@@ -23,6 +23,7 @@ import org.apache.flink.table.api.internal.PlanCacheManager;
 import org.apache.flink.table.gateway.api.endpoint.EndpointVersion;
 import org.apache.flink.table.gateway.api.session.SessionHandle;
 import org.apache.flink.table.gateway.service.context.SessionContext;
+import org.apache.flink.table.gateway.service.inmemory.InMemoryWorkflowScheduler;
 import org.apache.flink.table.gateway.service.operation.OperationExecutor;
 import org.apache.flink.table.gateway.service.operation.OperationManager;
 
@@ -75,6 +76,11 @@ public class Session implements Closeable {
 
     public OperationExecutor createExecutor(Configuration executionConfig) {
         return sessionContext.createOperationExecutor(executionConfig);
+    }
+
+    public OperationExecutor createExecutor(
+            Configuration executionConfig, InMemoryWorkflowScheduler inMemoryWorkflowScheduler) {
+        return sessionContext.createOperationExecutor(executionConfig, inMemoryWorkflowScheduler);
     }
 
     @Nullable

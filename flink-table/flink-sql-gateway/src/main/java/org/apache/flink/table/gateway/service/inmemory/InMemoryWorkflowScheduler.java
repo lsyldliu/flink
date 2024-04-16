@@ -22,6 +22,9 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.table.catalog.ObjectIdentifier;
 import org.apache.flink.table.catalog.dynamic.RefreshHandlerSerializer;
 import org.apache.flink.table.gateway.api.SqlGatewayService;
+import org.apache.flink.table.gateway.api.session.SessionEnvironment;
+import org.apache.flink.table.gateway.api.session.SessionHandle;
+import org.apache.flink.table.gateway.rest.util.SqlGatewayRestAPIVersion;
 import org.apache.flink.table.workflow.WorkflowScheduler;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
@@ -51,20 +54,17 @@ public class InMemoryWorkflowScheduler implements WorkflowScheduler<InMemoryRefr
     private static final DateTimeFormatter DEFAULT_DATETIME_FORMATTER =
             DateTimeFormatter.ofPattern(SCHEDULE_TIME_FORMAT);
 
-    private final SqlGatewayService service;
     private final Map<ObjectIdentifier, InMemoryRefreshHandler> dynamicTableRefreshHandlers =
             new HashMap<>();
     private final Map<ObjectIdentifier, ScheduledFuture<?>> dynamicTableScheduledFutures =
             new HashMap<>();
 
+    private SqlGatewayService service;
     private ScheduledThreadPoolExecutor scheduledThreadPoolExecutor;
 
-    public InMemoryWorkflowScheduler(SqlGatewayService service) {
+    public void start(SqlGatewayService service) {
         this.service = checkNotNull(service);
-    }
-
-    public void start() {
-        scheduledThreadPoolExecutor =
+        this.scheduledThreadPoolExecutor =
                 new ScheduledThreadPoolExecutor(
                         10, new ExecutorThreadFactory("InMemory Workflow Scheduler Pool"));
     }
@@ -101,7 +101,7 @@ public class InMemoryWorkflowScheduler implements WorkflowScheduler<InMemoryRefr
             return dynamicTableRefreshHandlers.get(dynamicTableIdentifier);
         }
         // assume the refreshCron always is a long value for test
-        long interval = Long.getLong(refreshCron);
+        long interval = Long.parseLong(refreshCron);
         ScheduledFuture<?> scheduledFuture =
                 scheduledThreadPoolExecutor.scheduleAtFixedRate(
                         new ScheduledTask(
@@ -120,7 +120,7 @@ public class InMemoryWorkflowScheduler implements WorkflowScheduler<InMemoryRefr
                         dynamicTableIdentifier,
                         refreshStatement,
                         workflowNamePrefix + createTime,
-                        refreshCron,
+                        interval,
                         isPeriodic,
                         staticPartitions,
                         executionConf);
@@ -176,7 +176,7 @@ public class InMemoryWorkflowScheduler implements WorkflowScheduler<InMemoryRefr
             return false;
         }
 
-        long interval = Long.getLong(refreshHandler.getSchedulerInterval());
+        long interval = refreshHandler.getSchedulerInterval();
         ScheduledFuture<?> scheduledFuture =
                 scheduledThreadPoolExecutor.scheduleAtFixedRate(
                         new ScheduledTask(
@@ -249,17 +249,23 @@ public class InMemoryWorkflowScheduler implements WorkflowScheduler<InMemoryRefr
         public void run() {
             long currentTime = System.currentTimeMillis();
             String scheduleTime = formatTimeStamp(currentTime);
-            LOG.info(
-                    "Trigger dynamic table {} refresh operation at time: {}",
-                    dynamicTableIdentifier.asSummaryString(),
-                    scheduleTime);
+            SessionHandle sessionHandle =
+                    service.openSession(
+                            SessionEnvironment.newBuilder()
+                                    .setSessionEndpointVersion(SqlGatewayRestAPIVersion.V3)
+                                    .build());
             service.refreshDynamicTable(
+                    sessionHandle,
                     dynamicTableIdentifier,
                     isPeriodic,
                     scheduleTime,
                     SCHEDULE_TIME_FORMAT,
                     staticPartitions,
                     executionConfig);
+            LOG.info(
+                    "Trigger dynamic table {} refresh operation at time: {}",
+                    dynamicTableIdentifier.asSummaryString(),
+                    scheduleTime);
         }
     }
 

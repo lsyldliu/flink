@@ -28,6 +28,9 @@ import org.apache.flink.runtime.minicluster.MiniCluster;
 import org.apache.flink.runtime.minicluster.RpcServiceSharing;
 import org.apache.flink.util.Preconditions;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /** Mini cluster resource configuration object. */
 public class MiniClusterResourceConfiguration {
 
@@ -134,6 +137,11 @@ public class MiniClusterResourceConfiguration {
         }
 
         public MiniClusterResourceConfiguration build() {
+            Map<String, String> fileCatalogStore = new HashMap<>();
+            fileCatalogStore.put("table.catalog-store.kind", "file");
+            fileCatalogStore.put("table.catalog-store.file.path", "/tmp");
+            configuration.addAll(Configuration.fromMap(fileCatalogStore));
+
             return new MiniClusterResourceConfiguration(
                     configuration,
                     numberTaskManagers,

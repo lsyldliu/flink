@@ -48,7 +48,10 @@ public enum SqlGatewayRestAPIVersion
 
     // V2 adds support for configuring Session and allows to serialize the RowData with PLAIN_TEXT
     // or JSON format.
-    V2(true, true);
+    V2(true, true),
+
+    // V3 adds dynamic table refresh API
+    V3(false, true);
 
     private final boolean isDefaultVersion;
 

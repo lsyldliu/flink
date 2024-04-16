@@ -39,6 +39,7 @@ import org.apache.flink.table.gateway.api.results.TableInfo;
 import org.apache.flink.table.gateway.api.session.SessionEnvironment;
 import org.apache.flink.table.gateway.api.session.SessionHandle;
 import org.apache.flink.table.gateway.api.utils.SqlGatewayException;
+import org.apache.flink.table.gateway.service.inmemory.InMemoryWorkflowScheduler;
 import org.apache.flink.table.gateway.service.operation.OperationManager;
 import org.apache.flink.table.gateway.service.session.Session;
 import org.apache.flink.table.gateway.service.session.SessionManager;
@@ -46,6 +47,7 @@ import org.apache.flink.table.gateway.service.session.SessionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -58,9 +60,12 @@ public class SqlGatewayServiceImpl implements SqlGatewayService {
     private static final Logger LOG = LoggerFactory.getLogger(SqlGatewayServiceImpl.class);
 
     private final SessionManager sessionManager;
+    private final InMemoryWorkflowScheduler inMemoryWorkflowScheduler;
 
-    public SqlGatewayServiceImpl(SessionManager sessionManager) {
+    public SqlGatewayServiceImpl(
+            SessionManager sessionManager, InMemoryWorkflowScheduler inMemoryWorkflowScheduler) {
         this.sessionManager = sessionManager;
+        this.inMemoryWorkflowScheduler = inMemoryWorkflowScheduler;
     }
 
     @Override
@@ -208,11 +213,45 @@ public class SqlGatewayServiceImpl implements SqlGatewayService {
                     .submitOperation(
                             handle ->
                                     getSession(sessionHandle)
-                                            .createExecutor(executionConfig)
+                                            .createExecutor(
+                                                    executionConfig, inMemoryWorkflowScheduler)
                                             .executeStatement(handle, statement));
         } catch (Throwable t) {
             LOG.error("Failed to execute statement.", t);
             throw new SqlGatewayException("Failed to execute statement.", t);
+        }
+    }
+
+    @Override
+    public OperationHandle refreshDynamicTable(
+            SessionHandle sessionHandle,
+            ObjectIdentifier dynamicTableIdentifier,
+            boolean isPeriodic,
+            String scheduleTime,
+            String scheduleTimeFormat,
+            Map<String, String> staticPartitions,
+            Map<String, String> executionConfig) {
+        try {
+            LOG.info(
+                    "Trigger dynamic table {} refresh operation, current time: {}.",
+                    dynamicTableIdentifier,
+                    new Date().toString());
+            return getSession(sessionHandle)
+                    .getOperationManager()
+                    .submitOperation(
+                            handle ->
+                                    getSession(sessionHandle)
+                                            .createExecutor(Configuration.fromMap(executionConfig))
+                                            .refreshDynamicTable(
+                                                    handle,
+                                                    dynamicTableIdentifier,
+                                                    isPeriodic,
+                                                    scheduleTime,
+                                                    scheduleTimeFormat,
+                                                    staticPartitions));
+        } catch (Throwable t) {
+            LOG.error("Failed to execute dynamic table refresh operation.", t);
+            throw new SqlGatewayException("Failed to execute dynamic table refresh operation.", t);
         }
     }
 

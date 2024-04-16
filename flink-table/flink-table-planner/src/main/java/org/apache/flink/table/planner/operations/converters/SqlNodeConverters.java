@@ -54,6 +54,10 @@ public class SqlNodeConverters {
         register(new SqlProcedureCallConverter());
         register(new SqlShowDatabasesConverter());
         register(new SqlCreateDynamicTableConverter());
+        register(new SqlAlterDynamicTableSuspendConverter());
+        register(new SqlAlterDynamicTableResumeConverter());
+        register(new SqlAlterDynamicTableRefreshConverter());
+        register(new SqlDropDynamicTableConverter());
     }
 
     /**

@@ -123,6 +123,18 @@ public class MockedSqlGatewayService implements SqlGatewayService {
     }
 
     @Override
+    public OperationHandle refreshDynamicTable(
+            SessionHandle sessionHandle,
+            ObjectIdentifier dynamicTableIdentifier,
+            boolean isPeriodic,
+            String scheduleTime,
+            String scheduleTimeFormat,
+            Map<String, String> staticPartitions,
+            Map<String, String> executionConfig) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public ResolvedSchema getOperationResultSchema(
             SessionHandle sessionHandle, OperationHandle operationHandle)
             throws SqlGatewayException {

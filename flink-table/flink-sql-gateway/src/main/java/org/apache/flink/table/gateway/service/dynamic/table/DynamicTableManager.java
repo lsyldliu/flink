@@ -28,7 +28,7 @@ public class DynamicTableManager {
 
     public static RuntimeExecutionMode determineExecutionMode(
             CatalogDynamicTable.RefreshMode refreshMode) {
-        if (refreshMode.equals(CatalogDynamicTable.RefreshMode.CONTINUOUS)) {
+        if (refreshMode == CatalogDynamicTable.RefreshMode.CONTINUOUS) {
             return RuntimeExecutionMode.STREAMING;
         } else {
             return RuntimeExecutionMode.BATCH;

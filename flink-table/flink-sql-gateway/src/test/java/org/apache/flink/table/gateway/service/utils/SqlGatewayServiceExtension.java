@@ -23,6 +23,7 @@ import org.apache.flink.core.testutils.CommonTestUtils;
 import org.apache.flink.table.gateway.api.SqlGatewayService;
 import org.apache.flink.table.gateway.service.SqlGatewayServiceImpl;
 import org.apache.flink.table.gateway.service.context.DefaultContext;
+import org.apache.flink.table.gateway.service.inmemory.InMemoryWorkflowScheduler;
 import org.apache.flink.table.gateway.service.session.SessionManager;
 
 import org.apache.commons.io.FileUtils;
@@ -48,6 +49,7 @@ public class SqlGatewayServiceExtension implements BeforeAllCallback, AfterAllCa
 
     private SqlGatewayService service;
     private SessionManager sessionManager;
+    private InMemoryWorkflowScheduler inMemoryWorkflowScheduler;
     private TemporaryFolder temporaryFolder;
     private final Supplier<Configuration> configSupplier;
     private final Function<DefaultContext, SessionManager> sessionManagerCreator;
@@ -76,10 +78,10 @@ public class SqlGatewayServiceExtension implements BeforeAllCallback, AfterAllCa
                 throw new IOException("Can't create testing config.yaml file.");
             }
 
-            FileUtils.write(
-                    confYaml,
-                    getFlinkConfContent(configSupplier.get().toMap()),
-                    StandardCharsets.UTF_8);
+            Map<String, String> flinkConf = configSupplier.get().toMap();
+            flinkConf.put("table.catalog-store.kind", "file");
+            flinkConf.put("table.catalog-store.file.path", confFolder.toString());
+            FileUtils.write(confYaml, getFlinkConfContent(flinkConf), StandardCharsets.UTF_8);
 
             // adjust the test environment for the purposes of this test
             Map<String, String> map = new HashMap<>(System.getenv());
@@ -94,14 +96,19 @@ public class SqlGatewayServiceExtension implements BeforeAllCallback, AfterAllCa
             CommonTestUtils.setEnv(originalEnv);
         }
 
-        service = new SqlGatewayServiceImpl(sessionManager);
+        inMemoryWorkflowScheduler = new InMemoryWorkflowScheduler();
+        service = new SqlGatewayServiceImpl(sessionManager, inMemoryWorkflowScheduler);
         sessionManager.start();
+        inMemoryWorkflowScheduler.start(service);
     }
 
     @Override
     public void afterAll(ExtensionContext context) throws Exception {
         if (sessionManager != null) {
             sessionManager.stop();
+        }
+        if (inMemoryWorkflowScheduler != null) {
+            inMemoryWorkflowScheduler.stop();
         }
         temporaryFolder.delete();
     }

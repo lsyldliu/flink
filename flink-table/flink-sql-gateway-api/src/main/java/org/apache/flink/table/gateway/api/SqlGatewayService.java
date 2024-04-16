@@ -177,6 +177,24 @@ public interface SqlGatewayService {
             throws SqlGatewayException;
 
     /**
+     * @param dynamicTableIdentifier
+     * @param isPeriodic
+     * @param scheduleTime
+     * @param scheduleTimeFormat
+     * @param staticPartitions
+     * @param executionConfig
+     * @return
+     */
+    OperationHandle refreshDynamicTable(
+            SessionHandle sessionHandle,
+            ObjectIdentifier dynamicTableIdentifier,
+            boolean isPeriodic,
+            String scheduleTime,
+            String scheduleTimeFormat,
+            Map<String, String> staticPartitions,
+            Map<String, String> executionConfig);
+
+    /**
      * Fetch the results from the operation. When maxRows is Integer.MAX_VALUE, it means to fetch
      * all available data.
      *

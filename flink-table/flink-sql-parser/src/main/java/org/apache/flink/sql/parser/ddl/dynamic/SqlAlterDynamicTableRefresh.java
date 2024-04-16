@@ -71,7 +71,7 @@ public class SqlAlterDynamicTableRefresh extends SqlAlterDynamicTable {
      */
     public LinkedHashMap<String, String> getStaticPartitionKVs() {
         LinkedHashMap<String, String> ret = new LinkedHashMap<>();
-        if (this.staticPartitions.size() == 0) {
+        if (this.staticPartitions == null || this.staticPartitions.size() == 0) {
             return ret;
         }
         for (SqlNode node : this.staticPartitions.getList()) {

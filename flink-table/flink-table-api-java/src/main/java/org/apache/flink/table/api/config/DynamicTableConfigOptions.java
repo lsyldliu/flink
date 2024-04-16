@@ -33,6 +33,9 @@ import static org.apache.flink.configuration.ConfigOptions.key;
 @PublicEvolving
 public class DynamicTableConfigOptions {
 
+    public static final String PARTITION_FIELDS = "partition.fields";
+    public static final String DATE_FORMATTER = "date-formatter";
+
     // For SqlGateway, always read this option from flink-conf yaml to guarantee that it will not be
     // modified
     @Documentation.TableOption(execMode = Documentation.ExecMode.BATCH_STREAMING)
@@ -46,7 +49,7 @@ public class DynamicTableConfigOptions {
 
     @Documentation.TableOption(execMode = Documentation.ExecMode.BATCH_STREAMING)
     public static final ConfigOption<String> PARTITION_FIELDS_DATE_FORMATTER =
-            key("partition.fields.#.date-formatter")
+            key(String.format("%s.#.%s", PARTITION_FIELDS, DATE_FORMATTER))
                     .stringType()
                     .noDefaultValue()
                     .withDescription(

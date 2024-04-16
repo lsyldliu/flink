@@ -23,10 +23,12 @@ import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.configuration.UnmodifiableConfiguration;
+import org.apache.flink.connector.file.table.catalog.FileSystemCatalog;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.config.TableConfigOptions;
 import org.apache.flink.table.api.internal.PlanCacheManager;
 import org.apache.flink.table.catalog.Catalog;
+import org.apache.flink.table.catalog.CatalogDescriptor;
 import org.apache.flink.table.catalog.CatalogManager;
 import org.apache.flink.table.catalog.CatalogStoreHolder;
 import org.apache.flink.table.catalog.FunctionCatalog;
@@ -38,6 +40,7 @@ import org.apache.flink.table.gateway.api.endpoint.EndpointVersion;
 import org.apache.flink.table.gateway.api.session.SessionEnvironment;
 import org.apache.flink.table.gateway.api.session.SessionHandle;
 import org.apache.flink.table.gateway.api.utils.SqlGatewayException;
+import org.apache.flink.table.gateway.service.inmemory.InMemoryWorkflowScheduler;
 import org.apache.flink.table.gateway.service.operation.OperationExecutor;
 import org.apache.flink.table.gateway.service.operation.OperationManager;
 import org.apache.flink.table.gateway.service.utils.SqlExecutionException;
@@ -63,7 +66,9 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 
 import static org.apache.flink.table.gateway.api.config.SqlGatewayServiceConfigOptions.SQL_GATEWAY_SESSION_PLAN_CACHE_ENABLED;
@@ -204,6 +209,11 @@ public class SessionContext {
 
     public OperationExecutor createOperationExecutor(Configuration executionConfig) {
         return new OperationExecutor(this, executionConfig);
+    }
+
+    public OperationExecutor createOperationExecutor(
+            Configuration executionConfig, InMemoryWorkflowScheduler inMemoryWorkflowScheduler) {
+        return new OperationExecutor(this, executionConfig, inMemoryWorkflowScheduler);
     }
 
     private void invalidatePlanCacheIfExist() {
@@ -433,9 +443,28 @@ public class SessionContext {
                 .forEach(
                         (catalogName, catalogCreator) -> {
                             if (!catalogName.equals(defaultCatalogName)) {
-                                catalogManager.registerCatalog(
-                                        catalogName,
-                                        catalogCreator.create(configuration, userClassLoader));
+                                Catalog catalog =
+                                        catalogCreator.create(configuration, userClassLoader);
+                                catalogManager.registerCatalog(catalogName, catalog);
+                                // store Catalog to CatalogStore
+                                if (catalog instanceof FileSystemCatalog) {
+                                    FileSystemCatalog fileSystemCatalog =
+                                            (FileSystemCatalog) catalog;
+                                    Map<String, String> catalogOptions = new HashMap<>();
+                                    catalogOptions.put("type", "filesystem");
+                                    catalogOptions.put(
+                                            "path", fileSystemCatalog.getCatalogPathStr());
+                                    catalogOptions.put(
+                                            "default-database",
+                                            fileSystemCatalog.getDefaultDatabase());
+                                    catalogStore
+                                            .catalogStore()
+                                            .storeCatalog(
+                                                    catalogName,
+                                                    CatalogDescriptor.of(
+                                                            catalogName,
+                                                            Configuration.fromMap(catalogOptions)));
+                                }
                             }
                         });
 

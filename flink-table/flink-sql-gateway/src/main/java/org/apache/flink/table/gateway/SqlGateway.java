@@ -32,6 +32,7 @@ import org.apache.flink.table.gateway.cli.SqlGatewayOptions;
 import org.apache.flink.table.gateway.cli.SqlGatewayOptionsParser;
 import org.apache.flink.table.gateway.service.SqlGatewayServiceImpl;
 import org.apache.flink.table.gateway.service.context.DefaultContext;
+import org.apache.flink.table.gateway.service.inmemory.InMemoryWorkflowScheduler;
 import org.apache.flink.table.gateway.service.session.SessionManager;
 
 import org.slf4j.Logger;
@@ -52,18 +53,21 @@ public class SqlGateway {
     private final SessionManager sessionManager;
     private final List<SqlGatewayEndpoint> endpoints;
     private final CountDownLatch latch;
+    private final InMemoryWorkflowScheduler inMemoryWorkflowScheduler;
 
     public SqlGateway(Configuration defaultConfig, SessionManager sessionManager) {
         this.defaultConfig = defaultConfig;
         this.sessionManager = sessionManager;
         this.endpoints = new ArrayList<>();
         this.latch = new CountDownLatch(1);
+        this.inMemoryWorkflowScheduler = new InMemoryWorkflowScheduler();
     }
 
     public void start() throws Exception {
         sessionManager.start();
 
-        SqlGatewayService sqlGatewayService = new SqlGatewayServiceImpl(sessionManager);
+        SqlGatewayService sqlGatewayService =
+                new SqlGatewayServiceImpl(sessionManager, inMemoryWorkflowScheduler);
         try {
             endpoints.addAll(
                     SqlGatewayEndpointFactoryUtils.createSqlGatewayEndpoint(
@@ -75,6 +79,8 @@ public class SqlGateway {
             LOG.error("Failed to start the endpoints.", t);
             throw new SqlGatewayException("Failed to start the endpoints.", t);
         }
+        // start inmemory workflow scheduler
+        inMemoryWorkflowScheduler.start(sqlGatewayService);
     }
 
     public void stop() {
@@ -83,6 +89,9 @@ public class SqlGateway {
         }
         if (sessionManager != null) {
             sessionManager.stop();
+        }
+        if (inMemoryWorkflowScheduler != null) {
+            inMemoryWorkflowScheduler.stop();
         }
         latch.countDown();
     }

@@ -196,9 +196,7 @@ public class SqlGatewayServiceITCase {
 
         SessionHandle sessionHandle = service.openSession(environment);
         TableEnvironmentInternal tableEnv =
-                service.getSession(sessionHandle)
-                        .createExecutor(new Configuration())
-                        .getTableEnvironment();
+                service.getSession(sessionHandle).createExecutor().getTableEnvironment();
         assertThat(tableEnv.getCurrentCatalog()).isEqualTo(catalogName);
         assertThat(tableEnv.getCurrentDatabase()).isEqualTo(databaseName);
         assertThat(tableEnv.listModules()).contains(moduleName);
