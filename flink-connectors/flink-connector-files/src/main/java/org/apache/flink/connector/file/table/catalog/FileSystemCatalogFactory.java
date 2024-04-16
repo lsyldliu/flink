@@ -60,7 +60,7 @@ public class FileSystemCatalogFactory implements CatalogFactory {
         return new FileSystemCatalog(
                 helper.getOptions().get(PATH),
                 context.getName(),
-                context.getOptions().get(DEFAULT_DATABASE));
+                helper.getOptions().get(DEFAULT_DATABASE));
     }
 
     @Override

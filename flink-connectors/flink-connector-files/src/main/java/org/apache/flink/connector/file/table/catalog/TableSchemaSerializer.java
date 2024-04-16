@@ -82,40 +82,48 @@ public class TableSchemaSerializer
             partitionColumns = partitionColumnsNode.asText();
         }
 
-        String definitionQuery = jsonNode.get("definitionQuery").asText();
-
-        JsonNode freshnessNode = jsonNode.get("freshness");
-        Duration freshness =
-                ctx.readValue(traverse(freshnessNode, jsonParser.getCodec()), Duration.class);
-
-        JsonNode logicalRefreshModeNode = jsonNode.get("logicalRefreshMode");
-        CatalogDynamicTable.LogicalRefreshMode logicalRefreshMode =
-                ctx.readValue(
-                        traverse(logicalRefreshModeNode, jsonParser.getCodec()),
-                        CatalogDynamicTable.LogicalRefreshMode.class);
-
-        JsonNode refreshModeNode = jsonNode.get("refreshMode");
-        CatalogDynamicTable.RefreshMode refreshMode =
-                ctx.readValue(
-                        traverse(refreshModeNode, jsonParser.getCodec()),
-                        CatalogDynamicTable.RefreshMode.class);
-
-        JsonNode refreshStatusNode = jsonNode.get("refreshStatus");
-        CatalogDynamicTable.RefreshStatus refreshStatus =
-                ctx.readValue(
-                        traverse(refreshStatusNode, jsonParser.getCodec()),
-                        CatalogDynamicTable.RefreshStatus.class);
-        JsonNode refreshHandlerDescNode = jsonNode.get("refreshHandlerDescription");
+        String definitionQuery = null;
+        Duration freshness = null;
+        CatalogDynamicTable.LogicalRefreshMode logicalRefreshMode = null;
+        CatalogDynamicTable.RefreshMode refreshMode = null;
+        CatalogDynamicTable.RefreshStatus refreshStatus = null;
         String refreshHandlerDesc = null;
-        if (refreshHandlerDescNode != null) {
-            refreshHandlerDesc = refreshHandlerDescNode.asText();
-        }
+        byte[] serializedRefreshHandler = null;
+        if (tableKind == CatalogBaseTable.TableKind.DYNAMIC_TABLE) {
+            definitionQuery = jsonNode.get("definitionQuery").asText();
 
-        JsonNode serializedRefreshHandlerNode = jsonNode.get("serializedRefreshHandler");
-        byte[] serializedRefreshHandler =
-                ctx.readValue(
-                        traverse(serializedRefreshHandlerNode, jsonParser.getCodec()),
-                        byte[].class);
+            JsonNode freshnessNode = jsonNode.get("freshness");
+            freshness =
+                    ctx.readValue(traverse(freshnessNode, jsonParser.getCodec()), Duration.class);
+
+            JsonNode logicalRefreshModeNode = jsonNode.get("logicalRefreshMode");
+            logicalRefreshMode =
+                    ctx.readValue(
+                            traverse(logicalRefreshModeNode, jsonParser.getCodec()),
+                            CatalogDynamicTable.LogicalRefreshMode.class);
+
+            JsonNode refreshModeNode = jsonNode.get("refreshMode");
+            refreshMode =
+                    ctx.readValue(
+                            traverse(refreshModeNode, jsonParser.getCodec()),
+                            CatalogDynamicTable.RefreshMode.class);
+
+            JsonNode refreshStatusNode = jsonNode.get("refreshStatus");
+            refreshStatus =
+                    ctx.readValue(
+                            traverse(refreshStatusNode, jsonParser.getCodec()),
+                            CatalogDynamicTable.RefreshStatus.class);
+            JsonNode refreshHandlerDescNode = jsonNode.get("refreshHandlerDescription");
+            if (refreshHandlerDescNode != null) {
+                refreshHandlerDesc = refreshHandlerDescNode.asText();
+            }
+
+            JsonNode serializedRefreshHandlerNode = jsonNode.get("serializedRefreshHandler");
+            serializedRefreshHandler =
+                    ctx.readValue(
+                            traverse(serializedRefreshHandlerNode, jsonParser.getCodec()),
+                            byte[].class);
+        }
 
         return new TableSchema(
                 tableKind,
@@ -161,18 +169,20 @@ public class TableSchemaSerializer
             generator.writeStringField("partitionColumns", tableSchema.getPartitionColumns());
         }
 
-        generator.writeStringField("definitionQuery", tableSchema.getDefinitionQuery());
-        generator.writeObjectField("freshness", tableSchema.getFreshness());
-        generator.writeObjectField("logicalRefreshMode", tableSchema.getLogicalRefreshMode());
-        generator.writeObjectField("refreshMode", tableSchema.getRefreshMode());
-        generator.writeObjectField("refreshStatus", tableSchema.getRefreshStatus());
-        if (tableSchema.getRefreshHandlerDescription() != null) {
-            generator.writeStringField(
-                    "refreshHandlerDescription", tableSchema.getRefreshHandlerDescription());
-        }
-        generator.writeBinaryField(
-                "serializedRefreshHandler", tableSchema.getSerializedRefreshHandler());
+        if (tableSchema.getTableKind() == CatalogBaseTable.TableKind.DYNAMIC_TABLE) {
+            generator.writeStringField("definitionQuery", tableSchema.getDefinitionQuery());
+            generator.writeObjectField("freshness", tableSchema.getFreshness());
+            generator.writeObjectField("logicalRefreshMode", tableSchema.getLogicalRefreshMode());
+            generator.writeObjectField("refreshMode", tableSchema.getRefreshMode());
+            generator.writeObjectField("refreshStatus", tableSchema.getRefreshStatus());
+            if (tableSchema.getRefreshHandlerDescription() != null) {
+                generator.writeStringField(
+                        "refreshHandlerDescription", tableSchema.getRefreshHandlerDescription());
+            }
+            generator.writeBinaryField(
+                    "serializedRefreshHandler", tableSchema.getSerializedRefreshHandler());
 
-        generator.writeEndObject();
+            generator.writeEndObject();
+        }
     }
 }

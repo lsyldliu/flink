@@ -18,7 +18,7 @@
 
 package org.apache.flink.connector.file.table.catalog;
 
-import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.connector.file.table.FileSystemTableFactory;
 import org.apache.flink.core.fs.FSDataInputStream;
 import org.apache.flink.core.fs.FSDataOutputStream;
@@ -83,6 +83,8 @@ import static org.apache.flink.util.Preconditions.checkArgument;
 /** A catalog implementation for {@link FileSystem}. */
 public class FileSystemCatalog extends AbstractCatalog {
 
+    private static final String SCHEMA_PATH = "schema";
+    private static final String DATA_PATH = "data";
     static final String SCHEMA_EXTENSION = ".json";
 
     private final String catalogPathStr;
@@ -92,6 +94,10 @@ public class FileSystemCatalog extends AbstractCatalog {
         super(name, defaultDatabase);
         this.catalogPathStr = pathStr;
         this.path = new Path(pathStr);
+    }
+
+    public String getCatalogPathStr() {
+        return catalogPathStr;
     }
 
     @Override
@@ -249,8 +255,8 @@ public class FileSystemCatalog extends AbstractCatalog {
         }
 
         final Path tableSchemaPath =
-                tableSchemaPath(
-                        new Path(inferTablePath(catalogPathStr, tablePath)),
+                tableSchemaFilePath(
+                        new Path(inferTableSchemaPath(catalogPathStr, tablePath)),
                         tablePath.getObjectName());
         try {
             TableSchema tableSchema =
@@ -370,16 +376,22 @@ public class FileSystemCatalog extends AbstractCatalog {
             throw new UnsupportedOperationException(
                     "FileSystem catalog doesn't support to CREATE VIEW.");
         }
-        Tuple2<String, String> tableSchemaTuple = getJsonTableSchema(tablePath, catalogTable);
+        Tuple4<String, String, String, String> tableSchemaTuple =
+                getJsonTableSchema(tablePath, catalogTable);
         Path tableDir = new Path(tableSchemaTuple.f0);
-        String jsonSchema = tableSchemaTuple.f1;
+        Path tableSchemaDir = new Path(tableSchemaTuple.f1);
+        Path tableDataDir = new Path(tableSchemaTuple.f2);
+        String jsonSchema = tableSchemaTuple.f3;
         try {
             FileSystem fs = tableDir.getFileSystem();
             if (!fs.exists(tableDir)) {
                 fs.mkdirs(tableDir);
+                fs.mkdirs(tableSchemaDir);
+                fs.mkdirs(tableDataDir);
             }
+
             // write table schema
-            Path tableSchemaPath = tableSchemaPath(tableDir, tablePath.getObjectName());
+            Path tableSchemaPath = tableSchemaFilePath(tableSchemaDir, tablePath.getObjectName());
             try (FSDataOutputStream os =
                     tableSchemaPath
                             .getFileSystem()
@@ -392,9 +404,11 @@ public class FileSystemCatalog extends AbstractCatalog {
         }
     }
 
-    private Tuple2<String, String> getJsonTableSchema(
+    private Tuple4<String, String, String, String> getJsonTableSchema(
             ObjectPath tablePath, CatalogBaseTable catalogTable) {
         final String tablePathStr = inferTablePath(catalogPathStr, tablePath);
+        final String tableSchemaPathStr = inferTableSchemaPath(catalogPathStr, tablePath);
+        final String tableDataPathStr = inferTableDataPath(catalogPathStr, tablePath);
         ResolvedCatalogBaseTable resolvedCatalogBaseTable = (ResolvedCatalogBaseTable) catalogTable;
         CatalogBaseTable.TableKind tableKind = catalogTable.getTableKind();
         ResolvedSchema resolvedSchema = resolvedCatalogBaseTable.getResolvedSchema();
@@ -404,7 +418,7 @@ public class FileSystemCatalog extends AbstractCatalog {
                         .toString();
         String comment = catalogTable.getComment();
         Map<String, String> options = new HashMap<>(catalogTable.getOptions());
-        options.put(PATH.key(), tablePathStr);
+        options.put(PATH.key(), tableDataPathStr);
         String pkConstraintName = null;
         String pkColumns = null;
         if (resolvedSchema.getPrimaryKey().isPresent()) {
@@ -461,7 +475,7 @@ public class FileSystemCatalog extends AbstractCatalog {
                         serializableRefreshHandler);
 
         String jsonSchema = JsonSerdeUtil.toJson(tableSchema);
-        return Tuple2.of(tablePathStr, jsonSchema);
+        return Tuple4.of(tablePathStr, tableSchemaPathStr, tableDataPathStr, jsonSchema);
     }
 
     @Override
@@ -482,17 +496,18 @@ public class FileSystemCatalog extends AbstractCatalog {
             return;
         }
 
-        Tuple2<String, String> tableSchemaTuple = getJsonTableSchema(tablePath, newTable);
-        Path tableDir = new Path(tableSchemaTuple.f0);
-        String jsonSchema = tableSchemaTuple.f1;
+        Tuple4<String, String, String, String> tableSchemaTuple =
+                getJsonTableSchema(tablePath, newTable);
+        Path tableSchemaDir = new Path(tableSchemaTuple.f1);
+        String jsonSchema = tableSchemaTuple.f3;
         try {
-            FileSystem fs = tableDir.getFileSystem();
-            if (!fs.exists(tableDir)) {
+            FileSystem fs = tableSchemaDir.getFileSystem();
+            if (!fs.exists(tableSchemaDir)) {
                 throw new CatalogException(
                         String.format("Table schema %s doesn't exists.", tablePath));
             }
             // write new table schema
-            Path tableSchemaPath = tableSchemaPath(tableDir, tablePath.getObjectName());
+            Path tableSchemaPath = tableSchemaFilePath(tableSchemaDir, tablePath.getObjectName());
             try (FSDataOutputStream os =
                     tableSchemaPath
                             .getFileSystem()
@@ -668,7 +683,19 @@ public class FileSystemCatalog extends AbstractCatalog {
                 "%s/%s/%s", catalogPath, tablePath.getDatabaseName(), tablePath.getObjectName());
     }
 
-    private Path tableSchemaPath(Path tableDir, String tableName) {
-        return new Path(tableDir, tableName + "_schema" + SCHEMA_EXTENSION);
+    private String inferTableDataPath(String catalogPath, ObjectPath tablePath) {
+        return String.format(
+                "%s/%s/%s/%s",
+                catalogPath, tablePath.getDatabaseName(), tablePath.getObjectName(), DATA_PATH);
+    }
+
+    private String inferTableSchemaPath(String catalogPath, ObjectPath tablePath) {
+        return String.format(
+                "%s/%s/%s/%s",
+                catalogPath, tablePath.getDatabaseName(), tablePath.getObjectName(), SCHEMA_PATH);
+    }
+
+    private Path tableSchemaFilePath(Path tableSchemaDir, String tableName) {
+        return new Path(tableSchemaDir, tableName + "_schema" + SCHEMA_EXTENSION);
     }
 }
