@@ -36,11 +36,20 @@ import org.apache.flink.table.operations.materializedtable.DropMaterializedTable
 import org.apache.flink.table.operations.materializedtable.MaterializedTableOperation;
 import org.apache.flink.table.refresh.ContinuousRefreshHandler;
 import org.apache.flink.table.refresh.ContinuousRefreshHandlerSerializer;
+import org.apache.flink.table.refresh.RefreshHandler;
+import org.apache.flink.table.refresh.RefreshHandlerSerializer;
+import org.apache.flink.table.workflow.CreatePeriodicRefreshWorkflow;
+import org.apache.flink.table.workflow.DeleteRefreshWorkflow;
+import org.apache.flink.table.workflow.ModifyRefreshWorkflowCronExpr;
+import org.apache.flink.table.workflow.ResumeRefreshWorkflow;
+import org.apache.flink.table.workflow.SuspendRefreshWorkflow;
+import org.apache.flink.table.workflow.WorkflowScheduler;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import static org.apache.flink.api.common.RuntimeExecutionMode.STREAMING;
@@ -178,5 +187,93 @@ public class MaterializedTableManager {
             token = result.getNextToken();
         }
         return results;
+    }
+
+    private void createMaterializedInFullMode(
+            WorkflowScheduler workflowScheduler,
+            CreateMaterializedTableOperation createMaterializedTableOperation) {
+        ObjectIdentifier materializedTableIdentifier =
+                createMaterializedTableOperation.getTableIdentifier();
+        CatalogMaterializedTable catalogMaterializedTable =
+                createMaterializedTableOperation.getCatalogMaterializedTable();
+        CreatePeriodicRefreshWorkflow event =
+                new CreatePeriodicRefreshWorkflow(
+                        materializedTableIdentifier,
+                        "",
+                        "",
+                        "",
+                        catalogMaterializedTable.getFreshness(),
+                        Collections.emptyMap());
+        try {
+            RefreshHandler refreshHandler = workflowScheduler.createRefreshWorkflow(event);
+            RefreshHandlerSerializer refreshHandlerSerializer =
+                    workflowScheduler.getRefreshHandlerSerializer();
+            byte[] refreshHandlerBytes = refreshHandlerSerializer.serialize(refreshHandler);
+        } catch (Exception e) {
+            throw new SqlExecutionException("Create refresh workflow occur exception", e);
+        }
+    }
+
+    private void suspendMaterializedTableInFullMode(
+            WorkflowScheduler workflowScheduler,
+            ObjectIdentifier materializedTableIdentifier,
+            CatalogMaterializedTable catalogMaterializedTable)
+            throws Exception {
+        RefreshHandlerSerializer refreshHandlerSerializer =
+                workflowScheduler.getRefreshHandlerSerializer();
+        RefreshHandler refreshHandler =
+                refreshHandlerSerializer.deserialize(
+                        catalogMaterializedTable.getSerializedRefreshHandler(),
+                        Thread.currentThread().getContextClassLoader());
+        SuspendRefreshWorkflow<?> suspendRefreshWorkflow =
+                new SuspendRefreshWorkflow<>(refreshHandler);
+        workflowScheduler.modifyRefreshWorkflow(suspendRefreshWorkflow);
+    }
+
+    private void resumeMaterializeTableInFullMode(
+            WorkflowScheduler workflowScheduler,
+            ObjectIdentifier materializedTableIdentifier,
+            CatalogMaterializedTable catalogMaterializedTable)
+            throws Exception {
+        RefreshHandlerSerializer refreshHandlerSerializer =
+                workflowScheduler.getRefreshHandlerSerializer();
+        RefreshHandler refreshHandler =
+                refreshHandlerSerializer.deserialize(
+                        catalogMaterializedTable.getSerializedRefreshHandler(),
+                        Thread.currentThread().getContextClassLoader());
+        ResumeRefreshWorkflow<?> resumeRefreshWorkflow =
+                new ResumeRefreshWorkflow<>(refreshHandler);
+        workflowScheduler.modifyRefreshWorkflow(resumeRefreshWorkflow);
+    }
+
+    private void modifyMaterializedTableCronExprInFullMode(
+            WorkflowScheduler workflowScheduler,
+            ObjectIdentifier materializedTableIdentifier,
+            CatalogMaterializedTable catalogMaterializedTable)
+            throws Exception {
+        RefreshHandlerSerializer refreshHandlerSerializer =
+                workflowScheduler.getRefreshHandlerSerializer();
+        RefreshHandler refreshHandler =
+                refreshHandlerSerializer.deserialize(
+                        catalogMaterializedTable.getSerializedRefreshHandler(),
+                        Thread.currentThread().getContextClassLoader());
+        ModifyRefreshWorkflowCronExpr<?> modifyRefreshWorkflowCronExpr =
+                new ModifyRefreshWorkflowCronExpr<>("", refreshHandler);
+        workflowScheduler.modifyRefreshWorkflow(modifyRefreshWorkflowCronExpr);
+    }
+
+    private void deleteMaterializedTableWorkflowInFullMode(
+            WorkflowScheduler workflowScheduler,
+            ObjectIdentifier materializedTableIdentifier,
+            CatalogMaterializedTable catalogMaterializedTable)
+            throws Exception {
+        RefreshHandlerSerializer refreshHandlerSerializer =
+                workflowScheduler.getRefreshHandlerSerializer();
+        RefreshHandler refreshHandler =
+                refreshHandlerSerializer.deserialize(
+                        catalogMaterializedTable.getSerializedRefreshHandler(),
+                        Thread.currentThread().getContextClassLoader());
+        DeleteRefreshWorkflow<?> deleteRefreshWorkflow = new DeleteRefreshWorkflow(refreshHandler);
+        workflowScheduler.deleteRefreshWorkflow(deleteRefreshWorkflow);
     }
 }
