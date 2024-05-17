@@ -64,6 +64,24 @@
             <version>${project.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.cronutils</groupId>
+            <artifactId>cron-utils</artifactId>
+            <version>${cronutils.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.quartz-scheduler</groupId>
+            <artifactId>quartz</artifactId>
+            <version>${quartz.version}</version>
+        </dependency>
+
         <!-- Test dependencies -->
         <dependency>
             <groupId>org.apache.flink</groupId>
@@ -153,8 +171,20 @@
                         <artifactSet>
                             <includes combine.children="append">
                                 <include>org.apache.flink:flink-sql-gateway-api</include>
+                                <include>org.quartz-scheduler:quartz</include>
+                                <include>com.cronutils:cron-utils</include>
                             </includes>
                         </artifactSet>
+                        <relocations>
+                            <relocation>
+                                <pattern>org.quartz</pattern>
+                                <shadedPattern>org.apache.flink.shaded.org.quartz</shadedPattern>
+                            </relocation>
+                            <relocation>
+                                <pattern>com.cronutils</pattern>
+                                <shadedPattern>org.apache.flink.shaded.com.cronutils</shadedPattern>
+                            </relocation>
+                        </relocations>
                     </configuration>
                 </execution>
             </executions>

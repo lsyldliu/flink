@@ -19,22 +19,24 @@
 package org.apache.flink.table.workflow;
 
 import org.apache.flink.annotation.PublicEvolving;
-import org.apache.flink.util.FlinkException;
+import org.apache.flink.table.catalog.CatalogMaterializedTable;
+import org.apache.flink.table.refresh.RefreshHandler;
 
 /**
- * A workflow-related operation exception to materialized table, including create, suspend, resume,
- * drop workflow operation, etc.
+ * {@link ModifyRefreshWorkflow} provides the related information to suspend refresh workflow of
+ * {@link CatalogMaterializedTable}.
  */
 @PublicEvolving
-public class WorkflowException extends FlinkException {
+public class SuspendRefreshWorkflow<T extends RefreshHandler> implements ModifyRefreshWorkflow<T> {
 
-    private static final long serialVersionUID = 1L;
+    private final T refreshHandler;
 
-    public WorkflowException(String message) {
-        super(message);
+    public SuspendRefreshWorkflow(T refreshHandler) {
+        this.refreshHandler = refreshHandler;
     }
 
-    public WorkflowException(String message, Throwable cause) {
-        super(message, cause);
+    @Override
+    public T getRefreshHandler() {
+        return refreshHandler;
     }
 }

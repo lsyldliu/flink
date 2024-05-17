@@ -38,6 +38,7 @@ import org.apache.flink.table.gateway.api.endpoint.EndpointVersion;
 import org.apache.flink.table.gateway.api.session.SessionEnvironment;
 import org.apache.flink.table.gateway.api.session.SessionHandle;
 import org.apache.flink.table.gateway.api.utils.SqlGatewayException;
+import org.apache.flink.table.gateway.service.materializedtable.MaterializedTableManager;
 import org.apache.flink.table.gateway.service.operation.OperationExecutor;
 import org.apache.flink.table.gateway.service.operation.OperationManager;
 import org.apache.flink.table.gateway.service.utils.SqlExecutionException;
@@ -239,6 +240,19 @@ public class SessionContext {
 
     // --------------------------------------------------------------------------------------------
 
+    /** Open resources, e.g. workflow scheduler. */
+    public void open() {
+        try {
+            sessionState.materializedTableManager.open();
+        } catch (Exception e) {
+            LOG.error(
+                    String.format(
+                            "Failed to open the materialized table manager for the session %s.",
+                            sessionId),
+                    e);
+        }
+    }
+
     /** Close resources, e.g. catalogs. */
     public void close() {
         operationManager.close();
@@ -266,6 +280,15 @@ public class SessionContext {
             LOG.error(
                     String.format(
                             "Failed to close the resource manager for the session %s.", sessionId),
+                    e);
+        }
+        try {
+            sessionState.materializedTableManager.close();
+        } catch (Exception e) {
+            LOG.error(
+                    String.format(
+                            "Failed to close the materialized table manager for the session %s.",
+                            sessionId),
                     e);
         }
     }
@@ -332,7 +355,14 @@ public class SessionContext {
 
         final FunctionCatalog functionCatalog =
                 new FunctionCatalog(configuration, resourceManager, catalogManager, moduleManager);
-        return new SessionState(catalogManager, moduleManager, resourceManager, functionCatalog);
+        final MaterializedTableManager materializedTableManager =
+                new MaterializedTableManager(configuration, resourceManager.getUserClassLoader());
+        return new SessionState(
+                catalogManager,
+                moduleManager,
+                resourceManager,
+                functionCatalog,
+                materializedTableManager);
     }
 
     private static ModuleManager buildModuleManager(
@@ -453,16 +483,19 @@ public class SessionContext {
         public final ResourceManager resourceManager;
         public final FunctionCatalog functionCatalog;
         public final ModuleManager moduleManager;
+        public final MaterializedTableManager materializedTableManager;
 
         public SessionState(
                 CatalogManager catalogManager,
                 ModuleManager moduleManager,
                 ResourceManager resourceManager,
-                FunctionCatalog functionCatalog) {
+                FunctionCatalog functionCatalog,
+                MaterializedTableManager materializedTableManager) {
             this.catalogManager = catalogManager;
             this.moduleManager = moduleManager;
             this.resourceManager = resourceManager;
             this.functionCatalog = functionCatalog;
+            this.materializedTableManager = materializedTableManager;
         }
     }
 }

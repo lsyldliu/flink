@@ -46,6 +46,8 @@ import org.apache.flink.table.gateway.service.session.SessionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -365,6 +367,19 @@ public class SqlGatewayServiceImpl implements SqlGatewayService {
             LOG.error("Failed to get statement completion candidates.", t);
             throw new SqlGatewayException("Failed to get statement completion candidates.", t);
         }
+    }
+
+    @Override
+    public OperationHandle refreshMaterializedTable(
+            SessionHandle sessionHandle,
+            String materializedTableIdentifier,
+            boolean isPeriodic,
+            @Nullable String scheduleTime,
+            Map<String, String> dynamicOptions,
+            Map<String, String> staticPartitions,
+            Map<String, String> executionConfig) {
+        // TODO: Implement refresh
+        return OperationHandle.create();
     }
 
     // --------------------------------------------------------------------------------------------

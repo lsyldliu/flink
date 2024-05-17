@@ -16,25 +16,20 @@
  * limitations under the License.
  */
 
-package org.apache.flink.table.workflow;
+package org.apache.flink.table.gateway.workflow.scheduler;
 
 import org.apache.flink.annotation.PublicEvolving;
-import org.apache.flink.util.FlinkException;
+import org.apache.flink.table.api.TableException;
 
-/**
- * A workflow-related operation exception to materialized table, including create, suspend, resume,
- * drop workflow operation, etc.
- */
+/** General exception for workflow scheduler related errors. */
 @PublicEvolving
-public class WorkflowException extends FlinkException {
+public class SchedulerException extends TableException {
 
-    private static final long serialVersionUID = 1L;
-
-    public WorkflowException(String message) {
+    public SchedulerException(String message) {
         super(message);
     }
 
-    public WorkflowException(String message, Throwable cause) {
+    public SchedulerException(String message, Throwable cause) {
         super(message, cause);
     }
 }

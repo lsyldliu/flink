@@ -30,6 +30,7 @@ import org.apache.flink.table.catalog.ResolvedCatalogMaterializedTable;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.catalog.TableChange;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.factories.WorkflowSchedulerFactoryUtil;
 import org.apache.flink.table.gateway.api.operation.OperationHandle;
 import org.apache.flink.table.gateway.api.results.ResultSet;
 import org.apache.flink.table.gateway.service.operation.OperationExecutor;
@@ -47,9 +48,12 @@ import org.apache.flink.table.operations.materializedtable.MaterializedTableOper
 import org.apache.flink.table.refresh.ContinuousRefreshHandler;
 import org.apache.flink.table.refresh.ContinuousRefreshHandlerSerializer;
 import org.apache.flink.table.types.logical.LogicalTypeFamily;
+import org.apache.flink.table.workflow.WorkflowScheduler;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -78,7 +82,33 @@ public class MaterializedTableManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(MaterializedTableManager.class);
 
-    public static ResultFetcher callMaterializedTableOperation(
+    private final Configuration configuration;
+    private final ClassLoader classLoader;
+
+    private @Nullable WorkflowScheduler workflowScheduler;
+
+    public MaterializedTableManager(Configuration configuration, ClassLoader classLoader) {
+        this.configuration = configuration;
+        this.classLoader = classLoader;
+    }
+
+    /** open the {@link MaterializedTableManager} and do the required initialization. */
+    public void open() throws Exception {
+        workflowScheduler =
+                WorkflowSchedulerFactoryUtil.createWorkflowScheduler(configuration, classLoader);
+        if (workflowScheduler != null) {
+            workflowScheduler.open();
+        }
+    }
+
+    /** Destroy the {@link MaterializedTableManager} and releases used resources. */
+    public void close() throws Exception {
+        if (workflowScheduler != null) {
+            workflowScheduler.close();
+        }
+    }
+
+    public ResultFetcher callMaterializedTableOperation(
             OperationExecutor operationExecutor,
             OperationHandle handle,
             MaterializedTableOperation op,
@@ -105,7 +135,7 @@ public class MaterializedTableManager {
                         "Unsupported Operation %s for materialized table.", op.asSummaryString()));
     }
 
-    private static ResultFetcher callCreateMaterializedTableOperation(
+    private ResultFetcher callCreateMaterializedTableOperation(
             OperationExecutor operationExecutor,
             OperationHandle handle,
             CreateMaterializedTableOperation createMaterializedTableOperation) {
@@ -123,7 +153,7 @@ public class MaterializedTableManager {
         return ResultFetcher.fromTableResult(handle, TABLE_RESULT_OK, false);
     }
 
-    private static void createMaterializedInContinuousMode(
+    private void createMaterializedInContinuousMode(
             OperationExecutor operationExecutor,
             OperationHandle handle,
             CreateMaterializedTableOperation createMaterializedTableOperation) {
@@ -156,7 +186,7 @@ public class MaterializedTableManager {
         }
     }
 
-    private static ResultFetcher callAlterMaterializedTableSuspend(
+    private ResultFetcher callAlterMaterializedTableSuspend(
             OperationExecutor operationExecutor,
             OperationHandle handle,
             AlterMaterializedTableSuspendOperation op) {
@@ -200,7 +230,7 @@ public class MaterializedTableManager {
         return ResultFetcher.fromTableResult(handle, TABLE_RESULT_OK, false);
     }
 
-    private static ResultFetcher callAlterMaterializedTableResume(
+    private ResultFetcher callAlterMaterializedTableResume(
             OperationExecutor operationExecutor,
             OperationHandle handle,
             AlterMaterializedTableResumeOperation op) {
@@ -230,7 +260,7 @@ public class MaterializedTableManager {
         return ResultFetcher.fromTableResult(handle, TABLE_RESULT_OK, false);
     }
 
-    private static void executeContinuousRefreshJob(
+    private void executeContinuousRefreshJob(
             OperationExecutor operationExecutor,
             OperationHandle handle,
             CatalogMaterializedTable catalogMaterializedTable,
@@ -306,7 +336,7 @@ public class MaterializedTableManager {
         }
     }
 
-    private static ResultFetcher callAlterMaterializedTableRefreshOperation(
+    private ResultFetcher callAlterMaterializedTableRefreshOperation(
             OperationExecutor operationExecutor,
             OperationHandle handle,
             AlterMaterializedTableRefreshOperation alterMaterializedTableRefreshOperation) {
@@ -340,8 +370,7 @@ public class MaterializedTableManager {
                     "Begin to manually refreshing the materialization table {}, statement: {}",
                     materializedTableIdentifier,
                     insertStatement);
-            return operationExecutor.executeStatement(
-                    handle, customConfig, insertStatement.toString());
+            return operationExecutor.executeStatement(handle, customConfig, insertStatement);
         } catch (Exception e) {
             // log and throw exception
             LOG.error(
@@ -356,72 +385,7 @@ public class MaterializedTableManager {
         }
     }
 
-    private static void validatePartitionSpec(
-            Map<String, String> partitionSpec, ResolvedCatalogMaterializedTable table) {
-        ResolvedSchema schema = table.getResolvedSchema();
-        Set<String> allPartitionKeys = new HashSet<>(table.getPartitionKeys());
-
-        Set<String> unknownPartitionKeys = new HashSet<>();
-        Set<String> nonStringPartitionKeys = new HashSet<>();
-
-        for (String partitionKey : partitionSpec.keySet()) {
-            if (!schema.getColumn(partitionKey).isPresent()) {
-                unknownPartitionKeys.add(partitionKey);
-                continue;
-            }
-
-            if (!schema.getColumn(partitionKey)
-                    .get()
-                    .getDataType()
-                    .getLogicalType()
-                    .getTypeRoot()
-                    .getFamilies()
-                    .contains(LogicalTypeFamily.CHARACTER_STRING)) {
-                nonStringPartitionKeys.add(partitionKey);
-            }
-        }
-
-        if (!unknownPartitionKeys.isEmpty()) {
-            throw new ValidationException(
-                    String.format(
-                            "The partition spec contains unknown partition keys:\n\n%s\n\nAll known partition keys are:\n\n%s",
-                            String.join("\n", unknownPartitionKeys),
-                            String.join("\n", allPartitionKeys)));
-        }
-
-        if (!nonStringPartitionKeys.isEmpty()) {
-            throw new ValidationException(
-                    String.format(
-                            "Currently, manually refreshing materialized table only supports specifying char and string type"
-                                    + " partition keys. All specific partition keys with unsupported types are:\n\n%s",
-                            String.join("\n", nonStringPartitionKeys)));
-        }
-    }
-
-    @VisibleForTesting
-    protected static String getManuallyRefreshStatement(
-            String tableIdentifier, String query, Map<String, String> partitionSpec) {
-        StringBuilder insertStatement =
-                new StringBuilder(
-                        String.format(
-                                "INSERT OVERWRITE %s\n  SELECT * FROM (%s)",
-                                tableIdentifier, query));
-        if (!partitionSpec.isEmpty()) {
-            insertStatement.append("\n  WHERE ");
-            insertStatement.append(
-                    partitionSpec.entrySet().stream()
-                            .map(
-                                    entry ->
-                                            String.format(
-                                                    "%s = '%s'", entry.getKey(), entry.getValue()))
-                            .reduce((s1, s2) -> s1 + " AND " + s2)
-                            .get());
-        }
-
-        return insertStatement.toString();
-    }
-
-    private static ResultFetcher callDropMaterializedTableOperation(
+    private ResultFetcher callDropMaterializedTableOperation(
             OperationExecutor operationExecutor,
             OperationHandle handle,
             DropMaterializedTableOperation dropMaterializedTableOperation) {
@@ -491,7 +455,21 @@ public class MaterializedTableManager {
         return ResultFetcher.fromTableResult(handle, TABLE_RESULT_OK, false);
     }
 
-    private static JobStatus getJobStatus(
+    private ResolvedCatalogMaterializedTable getCatalogMaterializedTable(
+            OperationExecutor operationExecutor, ObjectIdentifier tableIdentifier) {
+        ResolvedCatalogBaseTable<?> resolvedCatalogBaseTable =
+                operationExecutor.getTable(tableIdentifier);
+        if (MATERIALIZED_TABLE != resolvedCatalogBaseTable.getTableKind()) {
+            throw new ValidationException(
+                    String.format(
+                            "Table %s is not a materialized table, does not support materialized table related operation.",
+                            tableIdentifier));
+        }
+
+        return (ResolvedCatalogMaterializedTable) resolvedCatalogBaseTable;
+    }
+
+    private JobStatus getJobStatus(
             OperationExecutor operationExecutor,
             OperationHandle handle,
             ContinuousRefreshHandler refreshHandler) {
@@ -505,7 +483,7 @@ public class MaterializedTableManager {
         return JobStatus.valueOf(jobStatus);
     }
 
-    private static void cancelJob(
+    private void cancelJob(
             OperationExecutor operationExecutor, OperationHandle handle, String jobId) {
         operationExecutor.callStopJobOperation(
                 operationExecutor.getTableEnvironment(),
@@ -513,7 +491,7 @@ public class MaterializedTableManager {
                 new StopJobOperation(jobId, false, false));
     }
 
-    private static String stopJobWithSavepoint(
+    private String stopJobWithSavepoint(
             OperationExecutor executor, OperationHandle handle, String jobId) {
         // check savepoint dir is configured
         Optional<String> savepointDir =
@@ -551,18 +529,69 @@ public class MaterializedTableManager {
         }
     }
 
-    private static ResolvedCatalogMaterializedTable getCatalogMaterializedTable(
-            OperationExecutor operationExecutor, ObjectIdentifier tableIdentifier) {
-        ResolvedCatalogBaseTable<?> resolvedCatalogBaseTable =
-                operationExecutor.getTable(tableIdentifier);
-        if (MATERIALIZED_TABLE != resolvedCatalogBaseTable.getTableKind()) {
-            throw new ValidationException(
-                    String.format(
-                            "Table %s is not a materialized table, does not support materialized table related operation.",
-                            tableIdentifier));
+    private static void validatePartitionSpec(
+            Map<String, String> partitionSpec, ResolvedCatalogMaterializedTable table) {
+        ResolvedSchema schema = table.getResolvedSchema();
+        Set<String> allPartitionKeys = new HashSet<>(table.getPartitionKeys());
+
+        Set<String> unknownPartitionKeys = new HashSet<>();
+        Set<String> nonStringPartitionKeys = new HashSet<>();
+
+        for (String partitionKey : partitionSpec.keySet()) {
+            if (!schema.getColumn(partitionKey).isPresent()) {
+                unknownPartitionKeys.add(partitionKey);
+                continue;
+            }
+
+            if (!schema.getColumn(partitionKey)
+                    .get()
+                    .getDataType()
+                    .getLogicalType()
+                    .getTypeRoot()
+                    .getFamilies()
+                    .contains(LogicalTypeFamily.CHARACTER_STRING)) {
+                nonStringPartitionKeys.add(partitionKey);
+            }
         }
 
-        return (ResolvedCatalogMaterializedTable) resolvedCatalogBaseTable;
+        if (!unknownPartitionKeys.isEmpty()) {
+            throw new ValidationException(
+                    String.format(
+                            "The partition spec contains unknown partition keys:\n\n%s\n\nAll known partition keys are:\n\n%s",
+                            String.join("\n", unknownPartitionKeys),
+                            String.join("\n", allPartitionKeys)));
+        }
+
+        if (!nonStringPartitionKeys.isEmpty()) {
+            throw new ValidationException(
+                    String.format(
+                            "Currently, manually refreshing materialized table only supports specifying char and string type"
+                                    + " partition keys. All specific partition keys with unsupported types are:\n\n%s",
+                            String.join("\n", nonStringPartitionKeys)));
+        }
+    }
+
+    @VisibleForTesting
+    protected static String getManuallyRefreshStatement(
+            String tableIdentifier, String query, Map<String, String> partitionSpec) {
+        StringBuilder insertStatement =
+                new StringBuilder(
+                        String.format(
+                                "INSERT OVERWRITE %s\n  SELECT * FROM (%s)",
+                                tableIdentifier, query));
+        if (!partitionSpec.isEmpty()) {
+            insertStatement.append("\n  WHERE ");
+            insertStatement.append(
+                    partitionSpec.entrySet().stream()
+                            .map(
+                                    entry ->
+                                            String.format(
+                                                    "%s = '%s'", entry.getKey(), entry.getValue()))
+                            .reduce((s1, s2) -> s1 + " AND " + s2)
+                            .get());
+        }
+
+        return insertStatement.toString();
     }
 
     /** Generate insert statement for materialized table. */
