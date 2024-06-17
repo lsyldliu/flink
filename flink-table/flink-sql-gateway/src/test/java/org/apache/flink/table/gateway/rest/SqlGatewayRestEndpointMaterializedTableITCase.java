@@ -30,10 +30,13 @@ import org.apache.flink.table.gateway.api.operation.OperationHandle;
 import org.apache.flink.table.gateway.api.session.SessionHandle;
 import org.apache.flink.table.gateway.rest.handler.AbstractSqlGatewayRestHandler;
 import org.apache.flink.table.gateway.rest.header.materializedtable.RefreshMaterializedTableHeaders;
+import org.apache.flink.table.gateway.rest.header.operation.GetOperationStatusHeaders;
 import org.apache.flink.table.gateway.rest.header.statement.FetchResultsHeaders;
 import org.apache.flink.table.gateway.rest.message.materializedtable.RefreshMaterializedTableParameters;
 import org.apache.flink.table.gateway.rest.message.materializedtable.RefreshMaterializedTableRequestBody;
 import org.apache.flink.table.gateway.rest.message.materializedtable.RefreshMaterializedTableResponseBody;
+import org.apache.flink.table.gateway.rest.message.operation.OperationMessageParameters;
+import org.apache.flink.table.gateway.rest.message.operation.OperationStatusResponseBody;
 import org.apache.flink.table.gateway.rest.message.statement.FetchResultsMessageParameters;
 import org.apache.flink.table.gateway.rest.message.statement.FetchResultsResponseBody;
 import org.apache.flink.table.gateway.rest.util.RowFormat;
@@ -202,6 +205,18 @@ public class SqlGatewayRestEndpointMaterializedTableITCase
                                 .isTerminalStatus(),
                 Duration.ofSeconds(100),
                 "Failed to wait operation finish.");
+        GetOperationStatusHeaders getOperationStatusHeaders = new GetOperationStatusHeaders();
+        OperationMessageParameters operationMessageParameters =
+                new OperationMessageParameters(sessionHandle, operationHandle);
+        OperationStatusResponseBody operationStatusResponseBody =
+                restClient
+                        .sendRequest(
+                                SQL_GATEWAY_REST_ENDPOINT_EXTENSION.getTargetAddress(),
+                                SQL_GATEWAY_REST_ENDPOINT_EXTENSION.getTargetPort(),
+                                getOperationStatusHeaders,
+                                operationMessageParameters,
+                                EmptyRequestBody.getInstance())
+                        .get();
 
         // fetch all results
         FetchResultsResponseBody fetchResultsResponseBody =

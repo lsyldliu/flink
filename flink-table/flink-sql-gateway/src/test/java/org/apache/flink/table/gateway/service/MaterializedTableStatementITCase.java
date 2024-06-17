@@ -168,6 +168,11 @@ public class MaterializedTableStatementITCase extends AbstractMaterializedTableS
         long checkpointInterval =
                 getCheckpointIntervalConfig(restClusterClient, activeRefreshHandler.getJobId());
         assertThat(checkpointInterval).isEqualTo(30 * 1000);
+
+        String alterStatement = "ALTER MATERIALIZED TABLE users_shops REFRESH";
+        OperationHandle alterHandle =
+                service.executeStatement(sessionHandle, alterStatement, -1, new Configuration());
+        awaitOperationTermination(service, sessionHandle, alterHandle);
     }
 
     @Test

@@ -40,6 +40,9 @@ import org.apache.flink.table.connector.source.LookupTableSource;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
+import org.apache.flink.table.data.binary.BinaryRowData;
+import org.apache.flink.table.data.binary.BinaryStringData;
+import org.apache.flink.table.data.writer.BinaryRowWriter;
 import org.apache.flink.table.functions.AggregateFunction;
 import org.apache.flink.table.functions.BuiltInFunctionDefinitions;
 import org.apache.flink.table.functions.FunctionContext;
@@ -552,13 +555,28 @@ public class FunctionITCase extends StreamingTestBase {
 
     @Test
     void testExpressionReducerByUsingJar() {
+        List<Row> sourceData =
+                Arrays.asList(
+                        Row.of(1, "JARK,Ron"),
+                        Row.of(2, "RON"),
+                        Row.of(3, "LeoNard,abc,def"),
+                        Row.of(1, "FLINK"),
+                        Row.of(2, "CDC"));
+
+        TestCollectionTableFactory.reset();
+        TestCollectionTableFactory.initData(sourceData);
+
+        String sourceDDL = "create table t1(a int, b varchar) with ('connector' = 'COLLECTION')";
+        tEnv().executeSql(sourceDDL);
+
         String functionDDL =
                 String.format(
-                        "create temporary function lowerUdf as '%s' using jar '%s'",
-                        udfClassName, jarPath);
+                        "create temporary function binary_udtf as '%s'",
+                        BinaryRowUDTF.class.getName());
         tEnv().executeSql(functionDDL);
 
-        TableResult tableResult = tEnv().executeSql("SELECT lowerUdf('HELLO')");
+        TableResult tableResult =
+                tEnv().executeSql("SELECT i, s\n" + "FROM t1, LATERAL TABLE(binary_udtf(t1.b))");
 
         List<Row> actualRows = CollectionUtil.iteratorToList(tableResult.collect());
         assertThat(actualRows).isEqualTo(Arrays.asList(Row.of("hello")));
@@ -571,6 +589,30 @@ public class FunctionITCase extends StreamingTestBase {
 
         public Integer eval(Integer a, Integer b) {
             return a + b;
+        }
+    }
+
+    @FunctionHint(
+            output = @DataTypeHint(value = "ROW< i INT, s STRING >", bridgedTo = RowData.class))
+    public static class BinaryRowUDTF extends TableFunction<RowData> {
+
+        private transient BinaryRowData reusedRow;
+        private transient BinaryRowWriter reusedRowWriter;
+
+        public void open(FunctionContext context) throws Exception {
+            reusedRow = new BinaryRowData(2);
+            reusedRowWriter = new BinaryRowWriter(reusedRow);
+        }
+
+        public void eval(String input) {
+            int i = 0;
+            for (String s : input.split(",")) {
+                reusedRowWriter.reset();
+                reusedRowWriter.writeInt(0, i++);
+                reusedRowWriter.writeString(1, BinaryStringData.fromString(s));
+                reusedRowWriter.complete();
+                collect(reusedRow);
+            }
         }
     }
 

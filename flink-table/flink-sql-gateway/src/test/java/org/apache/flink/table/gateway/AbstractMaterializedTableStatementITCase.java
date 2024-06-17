@@ -237,7 +237,8 @@ public abstract class AbstractMaterializedTableStatementITCase {
                         + ")\n"
                         + "WITH (\n"
                         + "  'connector' = 'datagen',\n"
-                        + "  'rows-per-second' = '10'\n"
+                        + "  'rows-per-second' = '10',\n"
+                        + "  'number-of-rows' = '100'\n"
                         + ")";
         service.configureSession(sessionHandle, dataGenSource, -1);
         return sessionHandle;
