@@ -18,8 +18,13 @@
 
 package org.apache.flink.table.gateway.workflow.dolphinscheduler.entity;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /** DS materialized table parameter. */
 public class MaterializedTableParameters {
+
+    private List<Property> localParams = new ArrayList<>();
 
     private String identifier;
     private String gatewayEndpoint;
@@ -29,6 +34,14 @@ public class MaterializedTableParameters {
     private String executionConfig;
     private String initConfig;
     private String statementDescription;
+
+    public List<Property> getLocalParams() {
+        return localParams;
+    }
+
+    public void setLocalParams(List<Property> localParams) {
+        this.localParams = localParams;
+    }
 
     public String getIdentifier() {
         return identifier;

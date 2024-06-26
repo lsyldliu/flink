@@ -60,7 +60,7 @@ public class DolphinSchedulerRestAPITest {
 
     private static String sessionId;
     private static Map<String, String> headers = new HashMap<>();
-    private static long projectCode = 111869896098176L;
+    private static long projectCode = 111969609116064L;
 
     @BeforeAll
     static void setUp() throws Exception {
@@ -404,7 +404,7 @@ public class DolphinSchedulerRestAPITest {
 
         // 1. get task info
         String taskInfoUrl =
-                String.format("/projects/%s/task-definition/%s", projectCode, 111869964373376L);
+                String.format("/projects/%s/task-definition/%s", projectCode, 111983532362144L);
         HttpResponseBody taskInfoRespBody =
                 requestClient.get(taskInfoUrl, headers, new HashMap<>()).getBody();
         if (!taskInfoRespBody.getSuccess()) {
@@ -429,7 +429,7 @@ public class DolphinSchedulerRestAPITest {
         String offlineWorkflowUrl =
                 String.format(
                         "/projects/%s/process-definition/%s/release",
-                        projectCode, 111869964719488L);
+                        projectCode, 111983532554656L);
         Map<String, Object> offlineWorkflowParams = new HashMap<>();
         offlineWorkflowParams.put("releaseState", ReleaseState.OFFLINE);
 
