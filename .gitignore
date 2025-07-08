@@ -22,7 +22,6 @@ tmp
 *.iml
 *.swp
 *.jar
-*.zip
 *.log
 *.pyc
 .DS_Store
